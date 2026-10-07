@@ -1,7 +1,7 @@
 import { mockItems } from '../data/mockItems';
 
-// Empty EXPO_PUBLIC_API_URL falls back to mock data (see .env.example).
-const API_URL = process.env.EXPO_PUBLIC_API_URL;
+// Empty VITE_API_URL falls back to mock data (see .env.example).
+const API_URL = import.meta.env.VITE_API_URL;
 
 // Returns the public list of found items (mock data when no API URL is set).
 export async function fetchItems() {

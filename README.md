@@ -2,7 +2,7 @@
 
 Campus lost and found mobile app (COMP 7082, Team 9).
 
-- `mobile/`  React Native (Expo) app
+- `mobile/`  React web app (React Native components via react-native-web), built for mobile view
 - `server/`  Node.js + Express REST API, PostgreSQL
 
 ## Run the database
@@ -17,6 +17,6 @@ Campus lost and found mobile app (COMP 7082, Team 9).
 ## Run the mobile app
     cd mobile
     npm install
-    npx expo start       # scan the QR code with Expo Go
+    npm run dev          # open the URL, then use browser device mode (F12, Ctrl+Shift+M)
 
-On a real phone set `EXPO_PUBLIC_API_URL=http://<your-computer-LAN-IP>:3000` in `mobile/.env`.
+To use the real API instead of mock data, set `VITE_API_URL=http://localhost:3000` in `mobile/.env`.

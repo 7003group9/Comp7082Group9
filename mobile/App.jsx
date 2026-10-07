@@ -2,12 +2,15 @@
 // Login, MyListings and SecurityDashboard are stubs not wired in yet.
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { StatusBar } from 'expo-status-bar';
+import { View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import HomeScreen from './src/screens/HomeScreen';
 import ItemDetailScreen from './src/screens/ItemDetailScreen';
 import PostItemScreen from './src/screens/PostItemScreen';
 import { colors } from './src/theme';
+
+// Phone-width column, centred when viewed in a desktop browser.
+const frame = { flex: 1, width: '100%', maxWidth: 480, alignSelf: 'center' };
 
 // Stack navigator: screens push on top of each other with a back button.
 const Stack = createNativeStackNavigator();
@@ -16,6 +19,7 @@ export default function App() {
   // SafeAreaProvider lets screens avoid the notch / status bar.
   return (
     <SafeAreaProvider>
+      <View style={frame}>
       <NavigationContainer>
         <Stack.Navigator
           screenOptions={{
@@ -30,7 +34,7 @@ export default function App() {
           <Stack.Screen name="PostItem" component={PostItemScreen} options={{ title: 'Post a found item' }} />
         </Stack.Navigator>
       </NavigationContainer>
-      <StatusBar style="dark" />
+      </View>
     </SafeAreaProvider>
   );
 }
