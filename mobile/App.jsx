@@ -10,7 +10,7 @@ import PostItemScreen from './src/screens/PostItemScreen';
 import { colors } from './src/theme';
 
 // Phone-width column, centred when viewed in a desktop browser.
-const frame = { flex: 1, width: '100%', maxWidth: 480, alignSelf: 'center' };
+const frame = { flex: 1, width: '100%', maxWidth: 480, marginHorizontal: 'auto' };
 
 // Stack navigator: screens push on top of each other with a back button.
 const Stack = createNativeStackNavigator();
