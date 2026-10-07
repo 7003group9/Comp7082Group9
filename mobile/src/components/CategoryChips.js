@@ -1,6 +1,8 @@
 import { Pressable, ScrollView, StyleSheet, Text } from 'react-native';
 import { colors, spacing } from '../theme';
 
+// Horizontal row of category filter pills; the selected one is filled in.
+// Props: categories (string[]), selected (string), onSelect(category).
 export default function CategoryChips({ categories, selected, onSelect }) {
   return (
     <ScrollView

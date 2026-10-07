@@ -4,7 +4,6 @@ Campus lost and found mobile app (COMP 7082, Team 9).
 
 - `mobile/`  React Native (Expo) app
 - `server/`  Node.js + Express REST API, PostgreSQL
-- `docs/`    user stories and API notes
 
 ## Run the database
     docker compose up -d db

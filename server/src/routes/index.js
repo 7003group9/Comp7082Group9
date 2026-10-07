@@ -1,3 +1,4 @@
+// Combines every route file under its URL prefix (/auth, /items, ...).
 import { Router } from 'express';
 import auth from './auth.routes.js';
 import items from './items.routes.js';

@@ -1,3 +1,4 @@
+// /items routes: public list, single item, and posting a found item.
 import { Router } from 'express';
 import { listItems, getItem, createItem } from '../controllers/items.controller.js';
 

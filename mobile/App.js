@@ -1,3 +1,5 @@
+// App root: sets up navigation and the three screens that exist so far.
+// Login, MyListings and SecurityDashboard are stubs not wired in yet.
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { StatusBar } from 'expo-status-bar';
@@ -7,9 +9,11 @@ import ItemDetailScreen from './src/screens/ItemDetailScreen';
 import PostItemScreen from './src/screens/PostItemScreen';
 import { colors } from './src/theme';
 
+// Stack navigator: screens push on top of each other with a back button.
 const Stack = createNativeStackNavigator();
 
 export default function App() {
+  // SafeAreaProvider lets screens avoid the notch / status bar.
   return (
     <SafeAreaProvider>
       <NavigationContainer>
@@ -20,6 +24,7 @@ export default function App() {
             headerShadowVisible: false,
           }}
         >
+          {/* Home draws its own header, so the native one is hidden. */}
           <Stack.Screen name="Home" component={HomeScreen} options={{ headerShown: false }} />
           <Stack.Screen name="ItemDetail" component={ItemDetailScreen} options={{ title: 'Found item' }} />
           <Stack.Screen name="PostItem" component={PostItemScreen} options={{ title: 'Post a found item' }} />

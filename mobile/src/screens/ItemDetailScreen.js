@@ -1,7 +1,7 @@
 import { StyleSheet, Text, View } from 'react-native';
 import { colors, spacing, type } from '../theme';
 
-// TODO: load GET /items/{id}, show the public description, then the
+// TODO: load GET /items/:id, show the public description, then the
 // claim form with the finder's private questions (fetched only after login).
 export default function ItemDetailScreen({ route }) {
   return (

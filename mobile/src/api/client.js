@@ -1,11 +1,12 @@
 import { mockItems } from '../data/mockItems';
 
-// Set EXPO_PUBLIC_API_URL in .env (for example http://192.168.1.20:8000).
-// On a real phone, use your computer's LAN IP, not localhost.
+// Empty EXPO_PUBLIC_API_URL falls back to mock data (see .env.example).
 const API_URL = process.env.EXPO_PUBLIC_API_URL;
 
+// Returns the public list of found items (mock data when no API URL is set).
 export async function fetchItems() {
   if (!API_URL) {
+    // Mock mode: fake a short delay so the loading spinner is visible.
     await new Promise((r) => setTimeout(r, 400)); // simulate network
     return mockItems;
   }

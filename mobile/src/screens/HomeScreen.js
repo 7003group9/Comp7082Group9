@@ -1,3 +1,4 @@
+// Main screen: searchable, filterable list of found items with a post button.
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, FlatList, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -10,6 +11,8 @@ import SearchBar from '../components/SearchBar';
 import { colors, spacing, type } from '../theme';
 
 export default function HomeScreen({ navigation }) {
+  // items: loaded list; loading: first load; refreshing: pull-to-refresh;
+  // error: message to show; query/category: current filters.
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -17,6 +20,7 @@ export default function HomeScreen({ navigation }) {
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState('All');
 
+  // Fetch items and store them (or the error message).
   const load = useCallback(async () => {
     try {
       setError(null);
@@ -26,16 +30,19 @@ export default function HomeScreen({ navigation }) {
     }
   }, []);
 
+  // Load once when the screen opens.
   useEffect(() => {
     load().finally(() => setLoading(false));
   }, [load]);
 
+  // Pull-to-refresh handler.
   const onRefresh = async () => {
     setRefreshing(true);
     await load();
     setRefreshing(false);
   };
 
+  // Apply the search text (title or location) and category filter.
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
     return items.filter(
@@ -45,6 +52,7 @@ export default function HomeScreen({ navigation }) {
     );
   }, [items, query, category]);
 
+  // Scrolls with the list: title, search box and category chips.
   const header = (
     <View style={styles.header}>
       <Text style={styles.brand}>Campus Claim</Text>
@@ -55,6 +63,7 @@ export default function HomeScreen({ navigation }) {
     </View>
   );
 
+  // What to show when the list has no rows: spinner, error, or no matches.
   let empty = null;
   if (loading) empty = <ActivityIndicator style={styles.center} color={colors.teal} />;
   else if (error) empty = <Text style={[type.body, styles.center]}>{error}. Pull down to try again.</Text>;

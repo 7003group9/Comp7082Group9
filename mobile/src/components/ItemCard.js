@@ -1,6 +1,7 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { colors, spacing, type } from '../theme';
 
+// Turns an ISO date into "5 min ago" / "3 h ago" / "2 days ago".
 function timeAgo(iso) {
   const mins = Math.max(1, Math.round((Date.now() - new Date(iso).getTime()) / 60000));
   if (mins < 60) return `${mins} min ago`;
@@ -13,6 +14,7 @@ function timeAgo(iso) {
 // A found item styled like a claim ticket: details on the left,
 // a torn-off stub with the item number on the right.
 export default function ItemCard({ item, onPress }) {
+  // Anything not 'open' (e.g. 'claim pending') gets a badge.
   const pending = item.status !== 'open';
   return (
     <Pressable
@@ -27,6 +29,7 @@ export default function ItemCard({ item, onPress }) {
         <Text style={type.meta}>{timeAgo(item.foundAt)}</Text>
         {pending && <Text style={styles.pending}>Claim pending</Text>}
       </View>
+      {/* Dashed divider between the details and the stub. */}
       <View style={styles.tear} />
       <View style={styles.stub}>
         <Text style={styles.no}>No.</Text>

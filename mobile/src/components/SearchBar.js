@@ -1,6 +1,8 @@
 import { StyleSheet, TextInput, View } from 'react-native';
 import { colors, spacing } from '../theme';
 
+// Text box for filtering the list. Controlled: parent owns the text.
+// Props: value, onChangeText.
 export default function SearchBar({ value, onChangeText }) {
   return (
     <View style={styles.wrap}>

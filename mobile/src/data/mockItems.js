@@ -1,4 +1,4 @@
-// Placeholder data used until the FastAPI backend is running.
+// Placeholder data used until the API is configured.
 // NOTE: list items carry ONLY public info. Private questions and answers
 // are never sent to the list screen. IDs, cards and phones never appear
 // here either; they are routed to Campus Security on the server.

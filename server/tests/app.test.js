@@ -1,3 +1,4 @@
+// Run with `npm test` (Node's built-in test runner, no extra packages).
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import app from '../src/app.js';
