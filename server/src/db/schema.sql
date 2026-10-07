@@ -1,7 +1,9 @@
 CREATE TABLE IF NOT EXISTS users (
-  id           SERIAL PRIMARY KEY,
-  school_email TEXT UNIQUE NOT NULL,
-  role         TEXT NOT NULL DEFAULT 'student'  -- student | security
+  id            SERIAL PRIMARY KEY,
+  school_email  TEXT UNIQUE NOT NULL,
+  student_id    TEXT UNIQUE NOT NULL,
+  password_hash TEXT NOT NULL,
+  role          TEXT NOT NULL DEFAULT 'student'
 );
 
 CREATE TABLE IF NOT EXISTS items (
