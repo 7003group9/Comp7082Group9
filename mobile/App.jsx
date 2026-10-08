@@ -1,6 +1,5 @@
 // App root: sets up navigation and the three screens that exist so far.
 
-import RegisterScreen from "./src/screens/RegisterScreen";
 import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { View } from "react-native";
@@ -39,12 +38,6 @@ function AppNavigator() {
         <Stack.Screen
           name="Login"
           component={LoginScreen}
-          options={{ headerShown: false }}
-        />
-
-        <Stack.Screen
-          name="Register"
-          component={RegisterScreen}
           options={{ headerShown: false }}
         />
 

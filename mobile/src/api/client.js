@@ -14,52 +14,23 @@ export async function fetchItems() {
   if (!res.ok) throw new Error(`Could not load items (${res.status})`);
   return res.json();
 }
-export async function loginUser(email, password) {
-  if (!API_URL) {
-    throw new Error("API URL is not configured");
-  }
 
-  const res = await fetch(`${API_URL}/auth/login`, {
+// POST JSON and return the parsed reply; throws the server's error message.
+async function post(path, body) {
+  if (!API_URL) throw new Error("API URL is not configured");
+  const res = await fetch(`${API_URL}${path}`, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      email,
-      password,
-    }),
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
   });
-
-  const data = await res.json();
-
-  if (!res.ok) {
-    throw new Error(data.error || "Login failed");
-  }
-
-  return data.user;
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
+  return data;
 }
-export async function registerUser(email, studentId, password) {
-  if (!API_URL) {
-    throw new Error("API URL is not configured");
-  }
 
-  const res = await fetch(`${API_URL}/auth/register`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      email,
-      studentId,
-      password,
-    }),
-  });
+// Login step 1: the server emails a code to this student email.
+export const requestCode = (email) => post("/auth/request-code", { email });
 
-  const data = await res.json();
-
-  if (!res.ok) {
-    throw new Error(data.error || "Could not create account");
-  }
-
-  return data.user;
-}
+// Login step 2: trade the emailed code for { token, user }.
+export const verifyCode = (email, code) =>
+  post("/auth/verify-code", { email, code });
