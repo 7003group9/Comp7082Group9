@@ -14,6 +14,10 @@ Campus lost and found mobile app (COMP 7082, Team 9).
     npm install
     npm run dev          # http://localhost:3000/health
 
+Login is by emailed code (students only, `STUDENT_EMAIL_DOMAIN` in `.env`). Without `SMTP_URL`
+set, the code is printed in the server console instead of emailed.
+If you had the old database, reset it: `docker compose down -v && docker compose up -d db`.
+
 ## Run the mobile app
     cd mobile
     npm install

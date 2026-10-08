@@ -1,5 +1,10 @@
-// TODO: verify the school-login token (Authorization: Bearer <token>)
-// and set req.user = { id, role }.
+import { verifyToken } from '../services/token.js';
+
+// Route guard: needs "Authorization: Bearer <token>" from /auth/verify-code.
+// Sets req.user = { id, role }.
 export function requireAuth(req, res, next) {
-  res.status(501).json({ error: 'Auth not implemented yet' });
+  const user = verifyToken(req.headers.authorization?.replace(/^Bearer /, ''));
+  if (!user) return res.status(401).json({ error: 'Login required' });
+  req.user = user;
+  next();
 }
