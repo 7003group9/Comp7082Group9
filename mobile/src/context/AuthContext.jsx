@@ -24,6 +24,10 @@ export function AuthProvider({ children }) {
 
   function logout() {
     localStorage.removeItem("campusclaim_user");
+    // Saved post drafts hold private answers, so don't leave them for the next person.
+    Object.keys(localStorage)
+      .filter((k) => k.startsWith("campusclaim_draft_"))
+      .forEach((k) => localStorage.removeItem(k));
     setUser(null);
   }
 

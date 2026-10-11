@@ -51,3 +51,26 @@ test('token round-trips and rejects tampering', () => {
   assert.equal(verifyToken(token.slice(0, -2) + 'xx'), null);
   assert.equal(verifyToken(signToken({ id: 1 }, -1)), null);
 });
+
+test('posting an item needs login and a complete form', async () => {
+  const server = app.listen(0);
+  const url = `http://localhost:${server.address().port}/items`;
+  const post = (body, token) =>
+    fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...(token && { Authorization: `Bearer ${token}` }) },
+      body: JSON.stringify(body),
+    });
+  assert.equal((await post({ title: 'x' })).status, 401);
+  const token = signToken({ id: 1, role: 'student' });
+  assert.equal((await post({ title: 'Bottle', location: 'Library' }, token)).status, 400); // no question
+  server.close();
+});
+
+test('my posts and delete need login', async () => {
+  const server = app.listen(0);
+  const url = `http://localhost:${server.address().port}/items`;
+  assert.equal((await fetch(`${url}/mine`)).status, 401);
+  assert.equal((await fetch(`${url}/1`, { method: 'DELETE' })).status, 401);
+  server.close();
+});

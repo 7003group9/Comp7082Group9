@@ -1,15 +1,8 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { colors, spacing, type } from '../theme';
 
-// Turns an ISO date into "5 min ago" / "3 h ago" / "2 days ago".
-function timeAgo(iso) {
-  const mins = Math.max(1, Math.round((Date.now() - new Date(iso).getTime()) / 60000));
-  if (mins < 60) return `${mins} min ago`;
-  const hrs = Math.round(mins / 60);
-  if (hrs < 24) return `${hrs} h ago`;
-  const days = Math.round(hrs / 24);
-  return `${days} day${days === 1 ? '' : 's'} ago`;
-}
+// Turns an ISO date into the viewer's local date and time, e.g. "Oct 11, 2026, 3:28 PM".
+const postedAt = (iso) => new Date(iso).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' });
 
 // A found item styled like a claim ticket: details on the left,
 // a torn-off stub with the item number on the right.
@@ -20,13 +13,13 @@ export default function ItemCard({ item, onPress }) {
     <Pressable
       onPress={onPress}
       accessibilityRole="button"
-      accessibilityLabel={`${item.title}, found at ${item.location}, ${timeAgo(item.foundAt)}`}
+      accessibilityLabel={`${item.title}, found at ${item.location}, ${postedAt(item.foundAt)}`}
       style={({ pressed }) => [styles.card, pressed && styles.pressed]}
     >
       <View style={styles.main}>
         <Text style={styles.title}>{item.title}</Text>
         <Text style={type.meta}>{item.location}</Text>
-        <Text style={type.meta}>{timeAgo(item.foundAt)}</Text>
+        <Text style={type.meta}>{postedAt(item.foundAt)}</Text>
         {pending && <Text style={styles.pending}>Claim pending</Text>}
       </View>
       {/* Dashed divider between the details and the stub. */}
