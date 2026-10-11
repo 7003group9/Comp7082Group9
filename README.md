@@ -23,4 +23,4 @@ If you had the old database, reset it: `docker compose down -v && docker compose
     npm install
     npm run dev          # open the URL, then use browser device mode (F12, Ctrl+Shift+M)
 
-To use the real API instead of mock data, set `VITE_API_URL=http://localhost:3000` in `mobile/.env`.
+Set `VITE_API_URL=http://localhost:3000` in `mobile/.env` so the app can reach the server.

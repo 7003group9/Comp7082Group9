@@ -5,6 +5,8 @@ import react from '@vitejs/plugin-react';
 // renders them as normal HTML in the browser.
 export default defineConfig({
   plugins: [react()],
+  // react-native-web's animations reference Node's `global`; point it at the browser's.
+  define: { global: 'globalThis' },
   resolve: {
     // RN libraries ship *.web.js files for the browser; prefer them.
     extensions: ['.web.js', '.web.jsx', '.js', '.jsx', '.mjs', '.json'],

@@ -8,6 +8,7 @@ import HomeScreen from "./src/screens/HomeScreen";
 import LoginScreen from "./src/screens/LoginScreen";
 import ItemDetailScreen from "./src/screens/ItemDetailScreen";
 import PostItemScreen from "./src/screens/PostItemScreen";
+import MyListingsScreen from "./src/screens/MyListingsScreen";
 import { colors } from "./src/theme";
 import { AuthProvider, AuthContext } from "./src/context/AuthContext";
 import { useContext } from "react";
@@ -57,6 +58,12 @@ function AppNavigator() {
           name="PostItem"
           component={PostItemScreen}
           options={{ title: "Post a found item" }}
+        />
+
+        <Stack.Screen
+          name="MyListings"
+          component={MyListingsScreen}
+          options={{ title: "My posts" }}
         />
       </Stack.Navigator>
     </NavigationContainer>

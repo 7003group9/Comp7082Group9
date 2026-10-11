@@ -1,0 +1,5 @@
+// Choices offered in the app. Add campus buildings or categories here.
+// Where a finder can say they found something.
+export const buildings = ['NE1','NE2','NE3','NE4','NE4 WorkYard','NE6','NE7','NE8','NE9','NE10','NE12','NE14','NE16','NE18','NE20','NE21','NE22','NE23','NE24','NE25','NE28','NW1','NW3','NW4','NW5','NW6','SE1','SE2','SE3','SE4','SE6','SE8','SE9','SE10','SE12','SE14','SE16','SE19','SE28','SE30','SE40','SE42','SE50','SE52','SW1','SW2','SW3','SW5','SW07','SW9','SW10','SW11','SW12','SW13','SW14','SW15','SW16','LOT A','LOT B','LOT D','LOT E','LOT G','LOT H','LOT J','LOT L','LOT M','LOT N','LOT Q','LOT R','LOT S','LOT T','P5','P7','P8','P12','P15','P20','P21','P22','P24','P25','P26','P28','P29','CARI','HOOP','Other'];
+
+export const categories = ['All', 'Bags', 'Bottles', 'Clothing', 'Electronics', 'Keys', 'Other'];

@@ -1,5 +1,6 @@
 // Main screen: searchable, filterable list of found items with a post button.
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
+import { useFocusEffect } from "@react-navigation/native";
 import {
   ActivityIndicator,
   FlatList,
@@ -11,7 +12,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { fetchItems } from "../api/client";
-import { categories } from "../data/mockItems";
+import { categories } from "../data/options";
 import CategoryChips from "../components/CategoryChips";
 import ItemCard from "../components/ItemCard";
 import PostButton from "../components/PostButton";
@@ -46,10 +47,12 @@ export default function HomeScreen({ navigation }) {
     }
   }, []);
 
-  // Load once when the screen opens.
-  useEffect(() => {
-    load().finally(() => setLoading(false));
-  }, [load]);
+  // Load when the screen opens and again when returning to it (e.g. after posting).
+  useFocusEffect(
+    useCallback(() => {
+      load().finally(() => setLoading(false));
+    }, [load]),
+  );
 
   // Pull-to-refresh handler.
   const onRefresh = async () => {
@@ -76,9 +79,14 @@ export default function HomeScreen({ navigation }) {
       <View style={styles.topRow}>
         <Text style={styles.brand}>Campus Claim</Text>
 
-        <Pressable onPress={handleLogout}>
-          <Text style={styles.logout}>Logout</Text>
-        </Pressable>
+        <View style={styles.links}>
+          <Pressable onPress={() => navigation.navigate("MyListings")}>
+            <Text style={styles.logout}>My posts</Text>
+          </Pressable>
+          <Pressable onPress={handleLogout}>
+            <Text style={styles.logout}>Logout</Text>
+          </Pressable>
+        </View>
       </View>
 
       <Text style={styles.title}>Lost something?</Text>
@@ -162,6 +170,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
   },
 
+  links: { flexDirection: "row", gap: spacing.md },
   logout: {
     fontSize: 14,
     fontWeight: "600",
