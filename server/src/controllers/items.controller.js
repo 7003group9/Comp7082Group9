@@ -1,43 +1,53 @@
 import { query } from '../config/db.js';
-import { isSensitive } from '../services/sensitiveItemRouter.js';
-import { CATEGORIES, MAX_QUESTIONS, checkItem, clean } from '../services/itemValidation.js';
+import { CATEGORIES, MAX_OPEN_POSTS, MAX_QUESTIONS, checkItem, clean } from '../services/itemValidation.js';
 
 // Public fields ONLY. Private questions/answers are never selected here,
 // and sensitive items (IDs, cards, phones) are excluded from the public list.
-const PUBLIC_FIELDS = `id, title, category, location, found_at AS "foundAt", status`;
+const PUBLIC_FIELDS = `id, title, category, location, created_at AS "postedAt", status`;
 
-export async function listItems(req, res, next) {
-  try {
-    const { rows } = await query(
-      `SELECT ${PUBLIC_FIELDS} FROM items
-       WHERE is_sensitive = FALSE AND status <> 'handed off'
-       ORDER BY found_at DESC`
-    );
-    res.json(rows);
-  } catch (err) {
-    next(err);
-  }
+const PAGE_SIZE = 30;
+// Escapes % and _ so a search for "50%" matches those characters literally.
+const likePattern = (s) => `%${s.replace(/[\\%_]/g, '\\$&')}%`;
+
+// GET /items?q=&category=&before=<id>: the newest public items, one page at a time.
+// Reply: { items, hasMore }. Pass the last item's id as `before` for the next page.
+// Searching and filtering happen here so they cover every item, not just the page.
+export async function listItems(req, res) {
+  const q = clean(req.query.q, 100);
+  const category = clean(req.query.category, 50);
+  const before = /^\d{1,9}$/.test(req.query.before ?? '') ? Number(req.query.before) : null;
+  const { rows } = await query(
+    `SELECT ${PUBLIC_FIELDS} FROM items
+     WHERE is_sensitive = FALSE AND status <> 'handed off'
+       AND ($1::int IS NULL OR id < $1)
+       AND ($2 = '' OR category = $2)
+       AND ($3 = '' OR title ILIKE $3 OR location ILIKE $3)
+     ORDER BY id DESC LIMIT $4`,
+    [before, category, q ? likePattern(q) : '', PAGE_SIZE + 1]
+  );
+  res.json({ items: rows.slice(0, PAGE_SIZE), hasMore: rows.length > PAGE_SIZE });
 }
 
-export async function getItem(req, res, next) {
-  try {
-    const { rows } = await query(
-      `SELECT ${PUBLIC_FIELDS} FROM items WHERE id = $1 AND is_sensitive = FALSE`,
-      [req.params.id]
-    );
-    if (!rows[0]) return res.status(404).json({ error: 'Item not found' });
-    res.json(rows[0]);
-  } catch (err) {
-    next(err);
-  }
+// GET /items/options: what the post form and filters offer. The app builds its
+// pickers from this, so CATEGORIES and MAX_QUESTIONS are the only places to edit.
+export const getFormOptions = (req, res) => res.json({ categories: CATEGORIES, maxQuestions: MAX_QUESTIONS });
+
+export async function getItem(req, res) {
+  const { rows } = await query(
+    `SELECT ${PUBLIC_FIELDS} FROM items WHERE id = $1 AND is_sensitive = FALSE`,
+    [req.params.id]
+  );
+  if (!rows[0]) return res.status(404).json({ error: 'Item not found' });
+  res.json(rows[0]);
 }
 
-// POST /items  { title, category, location, questions: [{ question, answer }] }
+// POST /items  { title, category, location, sensitive?, questions: [{ question, answer }] }
 // Sent as JSON, or as a multipart form with up to 3 "photos" (questions as a JSON string).
 // Needs login. Incomplete posts get 400 with { error, fields: { field: message } }.
 // The item, its private questions and its photos go in with ONE statement, so
-// either all are saved or none. Sensitive items (IDs, cards, phones) are
-// saved too but never listed publicly; the reply says they go to Campus Security.
+// either all are saved or none. Sensitive items (the finder ticked "ID, card, wallet
+// or phone") are saved too but never listed publicly; the reply says they go to
+// Campus Security.
 export async function createItem(req, res) {
   const photos = req.files ?? [];
   const { item, errors } = checkItem(req.body ?? {}, photos);
@@ -45,8 +55,17 @@ export async function createItem(req, res) {
     return res.status(400).json({ error: Object.values(errors).join(' '), fields: errors });
   }
 
+  // Each student can only have so many posts open at once.
+  const { rows: [{ open }] } = await query(
+    `SELECT count(*)::int AS open FROM items WHERE finder_id = $1 AND status <> 'handed off'`,
+    [req.user.id]
+  );
+  if (open >= MAX_OPEN_POSTS) {
+    return res.status(429).json({ error: `You already have ${MAX_OPEN_POSTS} open posts. Delete one before posting another.` });
+  }
+
   const { title, category, location, questions } = item;
-  const sensitive = isSensitive(title);
+  const { sensitive } = item;
   // Only mention item_images when there are photos, so posting without photos
   // keeps working on a database that doesn't have that table yet.
   const photoInsert = photos.length
@@ -75,13 +94,14 @@ export async function createItem(req, res) {
 
 // Drafts: one unfinished post per user, kept apart from items so a draft is
 // never listed publicly. Only its owner can read it. Photos aren't kept in drafts.
-// Shape: { title, building, detail, category, questions: [{ question, answer }] }.
+// Shape: { title, building, detail, category, sensitive, questions: [{ question, answer }] }.
 function cleanDraft(b) {
   return {
     title: clean(b.title),
     building: clean(b.building),
     detail: clean(b.detail),
     category: CATEGORIES.includes(b.category) ? b.category : 'Other',
+    sensitive: b.sensitive === true,
     questions: (Array.isArray(b.questions) ? b.questions : [])
       .slice(0, MAX_QUESTIONS)
       .map((q) => ({ question: clean(q?.question), answer: clean(q?.answer) })),
@@ -119,7 +139,7 @@ export async function deleteDraft(req, res) {
 export async function listMine(req, res) {
   const { rows } = await query(
     `SELECT ${PUBLIC_FIELDS}, is_sensitive AS "isSensitive" FROM items
-     WHERE finder_id = $1 ORDER BY found_at DESC`,
+     WHERE finder_id = $1 ORDER BY id DESC`,
     [req.user.id]
   );
   res.json(rows);

@@ -1,19 +1,17 @@
 import { useContext, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { AuthContext } from "../context/AuthContext";
-import { createItem, deleteDraft, fetchDraft, putDraft } from "../api/client";
-import { buildings, categories } from "../data/options";
+import { createItem, deleteDraft, fetchDraft, fetchOptions, putDraft } from "../api/client";
+import { buildings } from "../data/options";
+import BuildingPicker from "../components/BuildingPicker";
 import CategoryChips from "../components/CategoryChips";
 import { colors, spacing, type } from "../theme";
 
-const MAX_QUESTIONS = 3;
 // Photo limits; the server checks the same ones.
 const MAX_PHOTOS = 3;
 const MAX_PHOTO_MB = 5;
 const PHOTO_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
-// Lighter than typed text so hints are clearly not real input.
-const PLACEHOLDER = "#A5B0BA";
-const pickable = categories.filter((c) => c !== "All");
+const PLACEHOLDER = colors.placeholder;
 const EMPTY_QA = { question: "", answer: "" };
 
 // Stored as one string, e.g. "Library, 2nd floor", so search still matches it.
@@ -78,6 +76,10 @@ export default function PostItemScreen({ navigation }) {
   const [building, setBuilding] = useState(""); // picked from the list
   const [detail, setDetail] = useState(""); // optional: floor, room, landmark
   const [category, setCategory] = useState("Other");
+  const [sensitive, setSensitive] = useState(false); // an ID, card, wallet or phone: kept off the public list
+  // What the server offers. Until it answers (or if it can't), the form has no
+  // categories and room for just one question.
+  const [options, setOptions] = useState({ categories: [], maxQuestions: 1 });
   // Each question has the answer the owner must give to claim the item.
   const [questions, setQuestions] = useState([EMPTY_QA]);
   // Picked photos as { file, uri }; uri is a preview straight from the device.
@@ -90,6 +92,14 @@ export default function PostItemScreen({ navigation }) {
   const [reviewing, setReviewing] = useState(false); // showing the review step
   const [result, setResult] = useState(null); // set after a successful post
 
+  // The category choices and question limit come from the server, so the app and
+  // server can never disagree about them.
+  useEffect(() => {
+    fetchOptions()
+      .then(setOptions)
+      .catch(() => {});
+  }, []);
+
   // Restore the draft saved on the server, if any. If it can't be loaded,
   // start with an empty form; posting still works.
   useEffect(() => {
@@ -101,6 +111,7 @@ export default function PostItemScreen({ navigation }) {
         setBuilding(draft.building ?? "");
         setDetail(draft.detail ?? "");
         setCategory(draft.category ?? "Other");
+        setSensitive(!!draft.sensitive);
         setQuestions(draft.questions?.length ? draft.questions : [EMPTY_QA]);
         setHasDraft(true);
         setNotice("Your saved draft was restored.");
@@ -149,7 +160,7 @@ export default function PostItemScreen({ navigation }) {
     setNotice("");
     setBusy(true);
     try {
-      await putDraft({ title, building, detail, category, questions }, user.token);
+      await putDraft({ title, building, detail, category, sensitive, questions }, user.token);
       setHasDraft(true);
       setNotice(
         photos.length
@@ -180,6 +191,7 @@ export default function PostItemScreen({ navigation }) {
     setBuilding("");
     setDetail("");
     setCategory("Other");
+    setSensitive(false);
     setQuestions([EMPTY_QA]);
     setPhotos([]);
     setFieldErrors({});
@@ -208,7 +220,7 @@ export default function PostItemScreen({ navigation }) {
     setBusy(true);
     try {
       const posted = await createItem(
-        { title, category, location, questions, photos: photos.map((p) => p.file) },
+        { title, category, location, sensitive, questions, photos: photos.map((p) => p.file) },
         user.token
       );
       deleteDraft(user.token).catch(() => {}); // posted, so the draft is no longer needed
@@ -240,7 +252,7 @@ export default function PostItemScreen({ navigation }) {
         <Text style={type.heading}>Thanks for posting!</Text>
         <Text style={[type.body, styles.gap]}>
           {result.routedToSecurity
-            ? "This looks like an ID, card or phone, so it won't be listed publicly. Please hand it in to Campus Security."
+            ? "This is an ID, card, wallet or phone, so it won't be listed publicly. Please hand it in to Campus Security."
             : `Your item is listed as No. ${result.id}.`}
         </Text>
         <Pressable style={styles.button} onPress={() => navigation.goBack()}>
@@ -267,6 +279,13 @@ export default function PostItemScreen({ navigation }) {
 
         <Text style={styles.label}>Category</Text>
         <Text style={styles.value}>{category}</Text>
+
+        {sensitive ? (
+          <>
+            <Text style={styles.label}>Listing</Text>
+            <Text style={styles.value}>Not listed publicly. Hand it in to Campus Security.</Text>
+          </>
+        ) : null}
 
         {photos.length ? (
           <>
@@ -319,10 +338,22 @@ export default function PostItemScreen({ navigation }) {
         }}
       />
       <FieldError message={fieldErrors.title} />
+      <Pressable
+        style={styles.checkRow}
+        onPress={() => setSensitive((s) => !s)}
+        accessibilityRole="checkbox"
+        accessibilityState={{ checked: sensitive }}
+      >
+        <View style={[styles.box, sensitive && styles.boxChecked]}>
+          {sensitive ? <Text style={styles.tick}>✓</Text> : null}
+        </View>
+        <Text style={[type.body, styles.checkLabel]}>This is an ID, card, wallet or phone</Text>
+      </Pressable>
+      {sensitive ? <Text style={[type.meta, styles.checkHint]}>It won't be listed publicly. Hand it in to Campus Security.</Text> : null}
 
       <Text style={styles.label}>Where did you find it?</Text>
-      <CategoryChips
-        categories={buildings}
+      <BuildingPicker
+        buildings={buildings}
         selected={building}
         onSelect={(b) => {
           setBuilding(b);
@@ -339,14 +370,18 @@ export default function PostItemScreen({ navigation }) {
       <FieldError message={fieldErrors.location} />
 
       <Text style={styles.label}>Category</Text>
-      <CategoryChips
-        categories={pickable}
-        selected={category}
-        onSelect={(c) => {
-          setCategory(c);
-          clearError("category");
-        }}
-      />
+      {options.categories.length ? (
+        <CategoryChips
+          categories={options.categories}
+          selected={category}
+          onSelect={(c) => {
+            setCategory(c);
+            clearError("category");
+          }}
+        />
+      ) : (
+        <Text style={type.meta}>Couldn't load the categories. "Other" will be used.</Text>
+      )}
       <FieldError message={fieldErrors.category} />
 
       <Text style={[styles.label, styles.gap]}>Photos (optional)</Text>
@@ -382,7 +417,7 @@ export default function PostItemScreen({ navigation }) {
         </View>
       ))}
       <FieldError message={fieldErrors.questions} />
-      {questions.length < MAX_QUESTIONS ? (
+      {questions.length < options.maxQuestions ? (
         <Pressable onPress={() => setQuestions((qs) => [...qs, EMPTY_QA])}>
           <Text style={styles.link}>+ Add another question</Text>
         </Pressable>
@@ -423,6 +458,21 @@ const styles = StyleSheet.create({
     color: colors.ink,
   },
   inputError: { borderColor: "#B00020" },
+  checkRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm, marginBottom: spacing.md },
+  box: {
+    width: 22,
+    height: 22,
+    borderRadius: 4,
+    borderWidth: 2,
+    borderColor: colors.ink,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.paper,
+  },
+  boxChecked: { backgroundColor: colors.ink },
+  tick: { color: colors.paper, fontSize: 14, fontWeight: "700", lineHeight: 16 },
+  checkLabel: { flexShrink: 1 },
+  checkHint: { marginTop: -spacing.sm, marginBottom: spacing.md },
   fieldError: { color: "#B00020", marginTop: -spacing.sm, marginBottom: spacing.md },
   detail: { marginTop: spacing.md },
   qa: { marginTop: spacing.md },

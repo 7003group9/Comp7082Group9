@@ -1,5 +1,5 @@
 // Main screen: searchable, filterable list of found items with a post button.
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useContext, useEffect, useRef, useState } from "react";
 import { useFocusEffect } from "@react-navigation/native";
 import {
   ActivityIndicator,
@@ -11,67 +11,101 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { fetchItems } from "../api/client";
-import { categories } from "../data/options";
+import { fetchItems, fetchOptions } from "../api/client";
+import { AuthContext } from "../context/AuthContext";
 import CategoryChips from "../components/CategoryChips";
 import ItemCard from "../components/ItemCard";
 import PostButton from "../components/PostButton";
 import SearchBar from "../components/SearchBar";
 import { colors, spacing, type } from "../theme";
-import { useContext } from "react";
-import { AuthContext } from "../context/AuthContext";
+
+// Changes only after `value` has stopped changing for `ms`, so the server
+// isn't asked a question on every keystroke.
+function useDebounced(value, ms) {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const timer = setTimeout(() => setDebounced(value), ms);
+    return () => clearTimeout(timer);
+  }, [value, ms]);
+  return debounced;
+}
 
 export default function HomeScreen({ navigation }) {
   const { logout } = useContext(AuthContext);
 
-  function handleLogout() {
-    logout();
-    navigation.replace("Login");
-  }
-  // items: loaded list; loading: first load; refreshing: pull-to-refresh;
-  // error: message to show; query/category: current filters.
+  // items: what's shown; hasMore: the server has older ones; loading: first load;
+  // loadingMore / refreshing: next page / pull-to-refresh; error: message to show;
+  // query/category: current filters; categories: "All" plus the server's list.
   const [items, setItems] = useState([]);
+  const [hasMore, setHasMore] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(null);
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("All");
+  const [categories, setCategories] = useState(["All"]);
+  const search = useDebounced(query.trim(), 300);
+  // Numbers each first-page request, so a slow reply to an old search can't
+  // overwrite the results of a newer one.
+  const latest = useRef(0);
 
-  // Fetch items and store them (or the error message).
-  const load = useCallback(async () => {
+  // The newest page for the current search and category, replacing what's shown.
+  // The server does the searching, so it covers every item, not just the loaded ones.
+  const loadFirst = useCallback(async () => {
+    const mine = ++latest.current;
     try {
+      const page = await fetchItems({ q: search, category });
+      if (mine !== latest.current) return;
+      setItems(page.items);
+      setHasMore(page.hasMore);
       setError(null);
-      setItems(await fetchItems());
     } catch (e) {
-      setError(e.message);
+      if (mine === latest.current) setError(e.message);
     }
+  }, [search, category]);
+
+  // The filter chips. The list still works if this fails (only "All" shows).
+  const loadCategories = () =>
+    fetchOptions()
+      .then((o) => setCategories(["All", ...o.categories]))
+      .catch(() => {});
+  useEffect(() => {
+    loadCategories();
   }, []);
 
-  // Load when the screen opens and again when returning to it (e.g. after posting).
+  // Load when the screen opens, when the search or category changes, and when
+  // coming back to it (e.g. after posting).
   useFocusEffect(
     useCallback(() => {
-      load().finally(() => setLoading(false));
-    }, [load]),
+      loadFirst().finally(() => setLoading(false));
+    }, [loadFirst]),
   );
+
+  // The next older page, when the list is scrolled near the end.
+  async function loadMore() {
+    if (!hasMore || loadingMore || loading) return;
+    const mine = latest.current;
+    setLoadingMore(true);
+    try {
+      const page = await fetchItems({ q: search, category, before: items[items.length - 1].id });
+      if (mine !== latest.current) return; // the search changed while this was loading
+      setItems((prev) => [...prev, ...page.items]);
+      setHasMore(page.hasMore);
+    } catch (e) {
+      setError(e.message);
+      setHasMore(false);
+    } finally {
+      setLoadingMore(false);
+    }
+  }
 
   // Pull-to-refresh handler.
   const onRefresh = async () => {
     setRefreshing(true);
-    await load();
+    await Promise.all([loadFirst(), loadCategories()]);
     setRefreshing(false);
   };
-
-  // Apply the search text (title or location) and category filter.
-  const visible = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    return items.filter(
-      (i) =>
-        (category === "All" || i.category === category) &&
-        (!q ||
-          i.title.toLowerCase().includes(q) ||
-          i.location.toLowerCase().includes(q)),
-    );
-  }, [items, query, category]);
 
   // Scrolls with the list: title, search box and category chips.
   const header = (
@@ -83,7 +117,7 @@ export default function HomeScreen({ navigation }) {
           <Pressable onPress={() => navigation.navigate("MyListings")}>
             <Text style={styles.logout}>My posts</Text>
           </Pressable>
-          <Pressable onPress={handleLogout}>
+          <Pressable onPress={logout}>
             <Text style={styles.logout}>Logout</Text>
           </Pressable>
         </View>
@@ -99,6 +133,10 @@ export default function HomeScreen({ navigation }) {
         selected={category}
         onSelect={setCategory}
       />
+      {/* A failed refresh while items are on screen: say so instead of failing silently. */}
+      {error && items.length ? (
+        <Text style={styles.banner}>{error}. Pull down to try again.</Text>
+      ) : null}
     </View>
   );
 
@@ -122,7 +160,7 @@ export default function HomeScreen({ navigation }) {
   return (
     <SafeAreaView style={styles.screen} edges={["top"]}>
       <FlatList
-        data={loading ? [] : visible}
+        data={loading ? [] : items}
         keyExtractor={(i) => String(i.id)}
         renderItem={({ item }) => (
           <ItemCard
@@ -137,6 +175,11 @@ export default function HomeScreen({ navigation }) {
         )}
         ListHeaderComponent={header}
         ListEmptyComponent={empty}
+        ListFooterComponent={
+          loadingMore ? <ActivityIndicator style={styles.more} color={colors.teal} /> : null
+        }
+        onEndReached={loadMore}
+        onEndReachedThreshold={0.5}
         contentContainerStyle={styles.list}
         refreshControl={
           <RefreshControl
@@ -163,6 +206,8 @@ const styles = StyleSheet.create({
   },
   title: { ...type.title, marginBottom: spacing.xs },
   center: { marginTop: spacing.xl, textAlign: "center", color: colors.slate },
+  more: { marginVertical: spacing.md },
+  banner: { color: "#B00020", marginTop: spacing.md },
   topRow: {
     flexDirection: "row",
     justifyContent: "space-between",

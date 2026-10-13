@@ -3,7 +3,9 @@
 
 // Same list the app offers (mobile/src/data/options.js, minus 'All'). Keep them in sync.
 export const CATEGORIES = ['Bags', 'Bottles', 'Clothing', 'Electronics', 'Keys', 'Other'];
-export const MAX_QUESTIONS = 5;
+export const MAX_QUESTIONS = 3;
+// A student can have this many posts that haven't been handed off at once.
+export const MAX_OPEN_POSTS = 20;
 
 // Photos: what the upload accepts, and the first bytes each type must start with,
 // so a file can't pretend to be an image just by its name or Content-Type.
@@ -47,11 +49,14 @@ export function checkItem(body, files = []) {
     .filter((q) => q.question && q.answer)
     .slice(0, MAX_QUESTIONS);
 
+  // The finder says it's an ID, card, wallet or phone (JSON: true, multipart: "true").
+  const sensitive = body.sensitive === true || body.sensitive === 'true';
+
   const errors = {};
   if (!title) errors.title = 'Say what the item is.';
   if (!location) errors.location = 'Say where you found it.';
   if (!CATEGORIES.includes(category)) errors.category = `Pick one of: ${CATEGORIES.join(', ')}.`;
   if (!questions.length) errors.questions = 'Add at least one private question with its answer.';
   if (!files.every(isRealImage)) errors.photos = 'One of the photos is not a JPEG, PNG, WebP or GIF image.';
-  return { item: { title, location, category, questions }, errors };
+  return { item: { title, location, category, questions, sensitive }, errors };
 }
