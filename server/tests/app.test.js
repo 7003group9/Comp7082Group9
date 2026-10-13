@@ -2,11 +2,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import app from '../src/app.js';
-import { isSensitive } from '../src/services/sensitiveItemRouter.js';
 import { verifyClaim } from '../src/services/claimVerification.js';
-import { issueCode, checkCode } from '../src/services/loginCodes.js';
+import { issueCode, checkCode, forgetCode } from '../src/services/loginCodes.js';
+import { errorHandler } from '../src/middleware/errorHandler.js';
 import { signToken, verifyToken } from '../src/services/token.js';
-import { checkItem } from '../src/services/itemValidation.js';
+import { CATEGORIES, MAX_QUESTIONS, checkItem } from '../src/services/itemValidation.js';
 
 test('GET /health', async () => {
   const server = app.listen(0);
@@ -14,12 +14,6 @@ test('GET /health', async () => {
   const res = await fetch(`http://localhost:${port}/health`);
   assert.deepEqual(await res.json(), { ok: true });
   server.close();
-});
-
-test('sensitive items are detected', () => {
-  assert.equal(isSensitive('Student card found in lab'), true);
-  assert.equal(isSensitive('iPhone 13, black case'), true);
-  assert.equal(isSensitive('Black water bottle'), false);
 });
 
 test('claim needs every answer right', () => {
@@ -30,20 +24,33 @@ test('claim needs every answer right', () => {
 });
 
 test('login code works once, then is used up', () => {
-  const code = issueCode('a@my.bcit.ca');
+  const { code, challenge } = issueCode('a@my.bcit.ca');
   assert.equal(issueCode('a@my.bcit.ca'), null); // too soon for another
-  assert.equal(checkCode('a@my.bcit.ca', '000000'), false);
-  assert.equal(checkCode('a@my.bcit.ca', code), true);
-  assert.equal(checkCode('a@my.bcit.ca', code), false);
+  assert.equal(checkCode('a@my.bcit.ca', '000000', challenge), false);
+  assert.equal(checkCode('a@my.bcit.ca', code, challenge), true);
+  assert.equal(checkCode('a@my.bcit.ca', code, challenge), false);
 });
 
 test('login code expires and locks after 5 wrong tries', () => {
   const t = Date.now();
-  const code = issueCode('b@my.bcit.ca', t);
-  assert.equal(checkCode('b@my.bcit.ca', code, t + 11 * 60 * 1000), false);
-  const code2 = issueCode('c@my.bcit.ca', t);
-  for (let i = 0; i < 5; i++) checkCode('c@my.bcit.ca', 'wrong', t);
-  assert.equal(checkCode('c@my.bcit.ca', code2, t), false);
+  const first = issueCode('b@my.bcit.ca', t);
+  assert.equal(checkCode('b@my.bcit.ca', first.code, first.challenge, t + 11 * 60 * 1000), false);
+  const { code, challenge } = issueCode('c@my.bcit.ca', t);
+  for (let i = 0; i < 5; i++) checkCode('c@my.bcit.ca', 'wrong', challenge, t);
+  assert.equal(checkCode('c@my.bcit.ca', code, challenge, t), false);
+});
+
+test('a stranger without the challenge cannot use up the real code', () => {
+  const { code, challenge } = issueCode('d@my.bcit.ca');
+  for (let i = 0; i < 20; i++) checkCode('d@my.bcit.ca', 'wrong', 'guess-' + i); // attacker knows only the email
+  assert.equal(checkCode('d@my.bcit.ca', code, undefined), false); // right code, no challenge
+  assert.equal(checkCode('d@my.bcit.ca', code, challenge), true); // the real student still gets in
+});
+
+test('a code whose email failed to send can be asked for again at once', () => {
+  assert.ok(issueCode('e@my.bcit.ca'));
+  forgetCode('e@my.bcit.ca');
+  assert.ok(issueCode('e@my.bcit.ca'));
 });
 
 test('token round-trips and rejects tampering', () => {
@@ -168,4 +175,55 @@ test('my posts and delete need login', async () => {
   assert.equal((await fetch(`${url}/mine`)).status, 401);
   assert.equal((await fetch(`${url}/1`, { method: 'DELETE' })).status, 401);
   server.close();
+});
+
+test('the finder can mark a post sensitive themselves', () => {
+  assert.equal(checkItem(goodPost).item.sensitive, false);
+  assert.equal(checkItem({ ...goodPost, sensitive: true }).item.sensitive, true);
+  assert.equal(checkItem({ ...goodPost, sensitive: 'true' }).item.sensitive, true); // multipart form
+});
+
+test('only MAX_QUESTIONS questions are kept', () => {
+  const many = Array.from({ length: MAX_QUESTIONS + 2 }, (_, i) => ({ question: `q${i}`, answer: 'a' }));
+  assert.equal(checkItem({ ...goodPost, questions: many }).item.questions.length, MAX_QUESTIONS);
+});
+
+test('form options are public and match what posts accept', async () => {
+  const server = app.listen(0);
+  try {
+    const res = await fetch(`http://localhost:${server.address().port}/items/options`);
+    assert.equal(res.status, 200);
+    assert.deepEqual(await res.json(), { categories: CATEGORIES, maxQuestions: MAX_QUESTIONS });
+  } finally {
+    server.close();
+  }
+});
+
+test('a non-numeric item id is a 400, not a database error', async () => {
+  const server = app.listen(0);
+  try {
+    const res = await fetch(`http://localhost:${server.address().port}/items/abc`);
+    assert.equal(res.status, 400);
+    assert.deepEqual(await res.json(), { error: 'Invalid item id' });
+  } finally {
+    server.close();
+  }
+});
+
+test('server errors never show internal details to the user', () => {
+  const reply = (err) => {
+    let out;
+    const res = { status: (code) => ({ json: (body) => (out = { code, body }) }) };
+    const log = console.error;
+    console.error = () => {};
+    errorHandler(err, {}, res, () => {});
+    console.error = log;
+    return out;
+  };
+  const internal = reply(new Error('connect ECONNREFUSED 10.0.0.5:5432'));
+  assert.equal(internal.code, 500);
+  assert.ok(!internal.body.error.includes('ECONNREFUSED'));
+  const mine = reply(Object.assign(new Error('Unexpected token } in JSON'), { status: 400 }));
+  assert.equal(mine.code, 400);
+  assert.equal(mine.body.error, 'Unexpected token } in JSON'); // client mistakes keep their message
 });

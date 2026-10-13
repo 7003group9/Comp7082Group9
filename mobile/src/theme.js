@@ -9,6 +9,7 @@ export const colors = {
   tealDark: '#085757',
   tag: '#F4C542',
   line: '#C9D4DC',
+  placeholder: '#A5B0BA', // hint text in empty inputs, lighter than typed text
 };
 
 // Spacing scale in px (use these instead of magic numbers).

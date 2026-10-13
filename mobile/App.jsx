@@ -29,42 +29,46 @@ function AppNavigator() {
   return (
     <NavigationContainer>
       <Stack.Navigator
-        initialRouteName={user ? "Home" : "Login"}
         screenOptions={{
           headerTintColor: colors.ink,
           headerStyle: { backgroundColor: colors.mist },
           headerShadowVisible: false,
         }}
       >
-        <Stack.Screen
-          name="Login"
-          component={LoginScreen}
-          options={{ headerShown: false }}
-        />
+        {user ? (
+          // Logged in: the app. Logging out (or an expired login) swaps these for Login.
+          <>
+            <Stack.Screen
+              name="Home"
+              component={HomeScreen}
+              options={{ headerShown: false }}
+            />
 
-        <Stack.Screen
-          name="Home"
-          component={HomeScreen}
-          options={{ headerShown: false }}
-        />
+            <Stack.Screen
+              name="ItemDetail"
+              component={ItemDetailScreen}
+              options={{ title: "Found item" }}
+            />
 
-        <Stack.Screen
-          name="ItemDetail"
-          component={ItemDetailScreen}
-          options={{ title: "Found item" }}
-        />
+            <Stack.Screen
+              name="PostItem"
+              component={PostItemScreen}
+              options={{ title: "Post a found item" }}
+            />
 
-        <Stack.Screen
-          name="PostItem"
-          component={PostItemScreen}
-          options={{ title: "Post a found item" }}
-        />
-
-        <Stack.Screen
-          name="MyListings"
-          component={MyListingsScreen}
-          options={{ title: "My posts" }}
-        />
+            <Stack.Screen
+              name="MyListings"
+              component={MyListingsScreen}
+              options={{ title: "My posts" }}
+            />
+          </>
+        ) : (
+          <Stack.Screen
+            name="Login"
+            component={LoginScreen}
+            options={{ headerShown: false }}
+          />
+        )}
       </Stack.Navigator>
     </NavigationContainer>
   );

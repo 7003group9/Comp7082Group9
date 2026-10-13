@@ -13,13 +13,13 @@ export default function ItemCard({ item, onPress }) {
     <Pressable
       onPress={onPress}
       accessibilityRole="button"
-      accessibilityLabel={`${item.title}, found at ${item.location}, ${postedAt(item.foundAt)}`}
+      accessibilityLabel={`${item.title}, found at ${item.location}, ${postedAt(item.postedAt)}`}
       style={({ pressed }) => [styles.card, pressed && styles.pressed]}
     >
       <View style={styles.main}>
         <Text style={styles.title}>{item.title}</Text>
         <Text style={type.meta}>{item.location}</Text>
-        <Text style={type.meta}>{postedAt(item.foundAt)}</Text>
+        <Text style={type.meta}>{postedAt(item.postedAt)}</Text>
         {pending && <Text style={styles.pending}>Claim pending</Text>}
       </View>
       {/* Dashed divider between the details and the stub. */}

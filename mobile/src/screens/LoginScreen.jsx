@@ -5,11 +5,12 @@ import { requestCode, verifyCode } from "../api/client";
 import { colors, spacing, type } from "../theme";
 
 // Two-step login: enter student email -> enter the code emailed to it.
-export default function LoginScreen({ navigation }) {
-  const { login } = useContext(AuthContext);
+export default function LoginScreen() {
+  const { login, expired } = useContext(AuthContext);
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
   const [codeSent, setCodeSent] = useState(false); // false = step 1, true = step 2
+  const [challenge, setChallenge] = useState(""); // secret from the server, sent back with the code
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -29,20 +30,21 @@ export default function LoginScreen({ navigation }) {
   const sendCode = () =>
     run(async () => {
       // The server checks the student-email domain; it only sends a code if valid.
-      await requestCode(email.trim().toLowerCase());
+      const reply = await requestCode(email.trim().toLowerCase());
+      setChallenge(reply.challenge);
       setCodeSent(true);
     });
 
   const submitCode = () =>
     run(async () => {
-      const { token, user } = await verifyCode(email.trim().toLowerCase(), code);
-      login({ ...user, token });
-      navigation.replace("Home");
+      const { token, user } = await verifyCode(email.trim().toLowerCase(), code, challenge);
+      login({ ...user, token }); // the app screens replace this one by themselves
     });
 
   return (
     <View style={styles.screen}>
       <Text style={type.title}>Campus Claim</Text>
+      {expired && !codeSent ? <Text style={styles.expired}>Your session expired. Please log in again.</Text> : null}
       <Text style={styles.hint}>
         {codeSent
           ? `We emailed a 6-digit code to ${email.trim()}.`
@@ -53,6 +55,7 @@ export default function LoginScreen({ navigation }) {
         <>
           <Text style={styles.label}>Code</Text>
           <TextInput
+            placeholderTextColor={colors.placeholder}
             style={styles.input}
             placeholder="123456"
             value={code}
@@ -66,6 +69,7 @@ export default function LoginScreen({ navigation }) {
         <>
           <Text style={styles.label}>Student email</Text>
           <TextInput
+            placeholderTextColor={colors.placeholder}
             style={styles.input}
             placeholder="name@my.bcit.ca"
             value={email}
@@ -108,6 +112,7 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     justifyContent: "center",
   },
+  expired: { color: "#B00020", marginTop: spacing.sm },
   hint: { ...type.meta, marginTop: spacing.sm, marginBottom: spacing.lg },
   label: { ...type.body, fontWeight: "600", marginBottom: spacing.xs },
   input: {

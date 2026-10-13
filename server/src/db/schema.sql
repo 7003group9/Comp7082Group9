@@ -1,7 +1,7 @@
 CREATE TABLE IF NOT EXISTS users (
   id           SERIAL PRIMARY KEY,
   school_email TEXT UNIQUE NOT NULL,
-  role         TEXT NOT NULL DEFAULT 'student'  -- student | security
+  role         TEXT NOT NULL DEFAULT 'student' CHECK (role IN ('student', 'security'))
 );
 
 CREATE TABLE IF NOT EXISTS items (
@@ -11,8 +11,8 @@ CREATE TABLE IF NOT EXISTS items (
   category            TEXT,
   location            TEXT,
   is_sensitive        BOOLEAN NOT NULL DEFAULT FALSE,  -- ID/card/phone -> security only
-  status              TEXT NOT NULL DEFAULT 'open',    -- open | claim pending | handed off
-  found_at            TIMESTAMPTZ NOT NULL DEFAULT now()
+  status              TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'claim pending', 'handed off')),
+  created_at          TIMESTAMPTZ NOT NULL DEFAULT now()  -- when it was posted
 );
 
 -- PRIVATE: never returned by public item endpoints
@@ -42,7 +42,7 @@ CREATE TABLE IF NOT EXISTS claims (
   id           SERIAL PRIMARY KEY,
   item_id      INTEGER NOT NULL REFERENCES items(id),
   claimant_id  INTEGER NOT NULL REFERENCES users(id),
-  status       TEXT NOT NULL DEFAULT 'pending'   -- pending | approved | rejected
+  status       TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected'))
 );
 
 CREATE TABLE IF NOT EXISTS claim_answers (
@@ -58,3 +58,15 @@ CREATE TABLE IF NOT EXISTS handoffs (
   staff_id     INTEGER NOT NULL REFERENCES users(id),
   completed_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- Indexes on the columns rows are looked up by. Postgres doesn't create them
+-- for foreign keys, and deleting an item has to find its questions, photos and claims.
+CREATE INDEX IF NOT EXISTS items_finder_idx ON items (finder_id);
+CREATE INDEX IF NOT EXISTS item_questions_item_idx ON item_questions (item_id);
+CREATE INDEX IF NOT EXISTS item_images_item_idx ON item_images (item_id);
+CREATE INDEX IF NOT EXISTS claims_item_idx ON claims (item_id);
+CREATE INDEX IF NOT EXISTS claims_claimant_idx ON claims (claimant_id);
+CREATE INDEX IF NOT EXISTS claim_answers_claim_idx ON claim_answers (claim_id);
+CREATE INDEX IF NOT EXISTS claim_answers_question_idx ON claim_answers (question_id);
+CREATE INDEX IF NOT EXISTS handoffs_claim_idx ON handoffs (claim_id);
+CREATE INDEX IF NOT EXISTS handoffs_staff_idx ON handoffs (staff_id);

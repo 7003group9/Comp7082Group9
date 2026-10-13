@@ -1,4 +1,4 @@
-import { useCallback, useContext, useState } from "react";
+import { useCallback, useContext, useEffect, useState } from "react";
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import { AuthContext } from "../context/AuthContext";
@@ -18,12 +18,21 @@ export default function MyListingsScreen() {
   // Reload whenever the screen is shown.
   useFocusEffect(
     useCallback(() => {
+      setError("");
       fetchMyItems(user.token)
         .then(setItems)
         .catch((e) => setError(e.message))
         .finally(() => setLoading(false));
     }, [user.token]),
   );
+
+  // An armed "Tap again to confirm" lapses after a few seconds, so a stray tap
+  // much later can't delete a post.
+  useEffect(() => {
+    if (confirmId === null) return;
+    const timer = setTimeout(() => setConfirmId(null), 4000);
+    return () => clearTimeout(timer);
+  }, [confirmId]);
 
   // First tap asks "sure?", second tap deletes (works the same on web and phone).
   async function onDelete(id) {
@@ -50,7 +59,8 @@ export default function MyListingsScreen() {
       data={items}
       keyExtractor={(i) => String(i.id)}
       ListHeaderComponent={error ? <Text style={styles.error}>{error}</Text> : null}
-      ListEmptyComponent={<Text style={[type.body, styles.empty]}>You haven't posted anything yet.</Text>}
+      // After a failed load the error above says what happened; "no posts" would be untrue.
+      ListEmptyComponent={error ? null : <Text style={[type.body, styles.empty]}>You haven't posted anything yet.</Text>}
       renderItem={({ item }) => (
         <View style={styles.card}>
           <View style={styles.info}>
