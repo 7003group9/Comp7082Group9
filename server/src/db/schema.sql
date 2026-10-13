@@ -23,6 +23,21 @@ CREATE TABLE IF NOT EXISTS item_questions (
   expected_answer TEXT NOT NULL
 );
 
+-- Photos of a found item, saved with the post. (Viewing them is a later sprint.)
+CREATE TABLE IF NOT EXISTS item_images (
+  id        SERIAL PRIMARY KEY,
+  item_id   INTEGER NOT NULL REFERENCES items(id) ON DELETE CASCADE,
+  mime_type TEXT NOT NULL,
+  data      BYTEA NOT NULL
+);
+
+-- PRIVATE: one unfinished post per user. Kept out of items so drafts are never public.
+CREATE TABLE IF NOT EXISTS drafts (
+  user_id    INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  data       JSONB NOT NULL,  -- { title, building, detail, category, questions }
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 CREATE TABLE IF NOT EXISTS claims (
   id           SERIAL PRIMARY KEY,
   item_id      INTEGER NOT NULL REFERENCES items(id),
