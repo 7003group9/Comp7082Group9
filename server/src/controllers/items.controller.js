@@ -1,5 +1,11 @@
-import { query } from '../config/db.js';
-import { CATEGORIES, MAX_OPEN_POSTS, MAX_QUESTIONS, checkItem, clean } from '../services/itemValidation.js';
+import { query } from "../config/db.js";
+import {
+  CATEGORIES,
+  MAX_OPEN_POSTS,
+  MAX_QUESTIONS,
+  checkItem,
+  clean,
+} from "../services/itemValidation.js";
 
 // Public fields ONLY. Private questions/answers are never selected here,
 // and sensitive items (IDs, cards, phones) are excluded from the public list.
@@ -7,7 +13,7 @@ const PUBLIC_FIELDS = `id, title, category, location, created_at AS "postedAt", 
 
 const PAGE_SIZE = 30;
 // Escapes % and _ so a search for "50%" matches those characters literally.
-const likePattern = (s) => `%${s.replace(/[\\%_]/g, '\\$&')}%`;
+const likePattern = (s) => `%${s.replace(/[\\%_]/g, "\\$&")}%`;
 
 // GET /items?q=&category=&before=<id>: the newest public items, one page at a time.
 // Reply: { items, hasMore }. Pass the last item's id as `before` for the next page.
@@ -15,29 +21,68 @@ const likePattern = (s) => `%${s.replace(/[\\%_]/g, '\\$&')}%`;
 export async function listItems(req, res) {
   const q = clean(req.query.q, 100);
   const category = clean(req.query.category, 50);
-  const before = /^\d{1,9}$/.test(req.query.before ?? '') ? Number(req.query.before) : null;
+  const location = clean(req.query.location, 100);
+  const dateFrom = req.query.dateFrom ?? "";
+  const dateTo = req.query.dateTo ?? "";
+
+  const before = /^\d{1,9}$/.test(req.query.before ?? "")
+    ? Number(req.query.before)
+    : null;
+
+  // Validate date filters
+  const validDate = (value) =>
+    value === "" ||
+    (/^\d{4}-\d{2}-\d{2}$/.test(value) &&
+      !Number.isNaN(Date.parse(value)) &&
+      new Date(value).toISOString().slice(0, 10) === value);
+
+  if (!validDate(dateFrom) || !validDate(dateTo)) {
+    return res.status(400).json({ error: "Invalid date format" });
+  }
+
+  if (dateFrom && dateTo && dateFrom > dateTo) {
+    return res
+      .status(400)
+      .json({ error: "Start date must be before end date" });
+  }
+
   const { rows } = await query(
     `SELECT ${PUBLIC_FIELDS} FROM items
      WHERE is_sensitive = FALSE AND status <> 'handed off'
        AND ($1::int IS NULL OR id < $1)
        AND ($2 = '' OR category = $2)
        AND ($3 = '' OR title ILIKE $3 OR location ILIKE $3)
-     ORDER BY id DESC LIMIT $4`,
-    [before, category, q ? likePattern(q) : '', PAGE_SIZE + 1]
+       AND ($4 = '' OR location ILIKE $4)
+       AND ($5::date IS NULL OR (created_at AT TIME ZONE 'America/Vancouver')::date >= $5::date)
+AND ($6::date IS NULL OR (created_at AT TIME ZONE 'America/Vancouver')::date <= $6::date)
+     ORDER BY id DESC LIMIT $7`,
+    [
+      before,
+      category,
+      q ? likePattern(q) : "",
+      location ? likePattern(location) : "",
+      dateFrom || null,
+      dateTo || null,
+      PAGE_SIZE + 1,
+    ],
   );
-  res.json({ items: rows.slice(0, PAGE_SIZE), hasMore: rows.length > PAGE_SIZE });
-}
 
+  res.json({
+    items: rows.slice(0, PAGE_SIZE),
+    hasMore: rows.length > PAGE_SIZE,
+  });
+}
 // GET /items/options: what the post form and filters offer. The app builds its
 // pickers from this, so CATEGORIES and MAX_QUESTIONS are the only places to edit.
-export const getFormOptions = (req, res) => res.json({ categories: CATEGORIES, maxQuestions: MAX_QUESTIONS });
+export const getFormOptions = (req, res) =>
+  res.json({ categories: CATEGORIES, maxQuestions: MAX_QUESTIONS });
 
 export async function getItem(req, res) {
   const { rows } = await query(
     `SELECT ${PUBLIC_FIELDS} FROM items WHERE id = $1 AND is_sensitive = FALSE`,
-    [req.params.id]
+    [req.params.id],
   );
-  if (!rows[0]) return res.status(404).json({ error: 'Item not found' });
+  if (!rows[0]) return res.status(404).json({ error: "Item not found" });
   res.json(rows[0]);
 }
 
@@ -52,16 +97,24 @@ export async function createItem(req, res) {
   const photos = req.files ?? [];
   const { item, errors } = checkItem(req.body ?? {}, photos);
   if (Object.keys(errors).length) {
-    return res.status(400).json({ error: Object.values(errors).join(' '), fields: errors });
+    return res
+      .status(400)
+      .json({ error: Object.values(errors).join(" "), fields: errors });
   }
 
   // Each student can only have so many posts open at once.
-  const { rows: [{ open }] } = await query(
+  const {
+    rows: [{ open }],
+  } = await query(
     `SELECT count(*)::int AS open FROM items WHERE finder_id = $1 AND status <> 'handed off'`,
-    [req.user.id]
+    [req.user.id],
   );
   if (open >= MAX_OPEN_POSTS) {
-    return res.status(429).json({ error: `You already have ${MAX_OPEN_POSTS} open posts. Delete one before posting another.` });
+    return res
+      .status(429)
+      .json({
+        error: `You already have ${MAX_OPEN_POSTS} open posts. Delete one before posting another.`,
+      });
   }
 
   const { title, category, location, questions } = item;
@@ -74,7 +127,7 @@ export async function createItem(req, res) {
        SELECT item.id, t.m, t.d FROM item, unnest($8::text[], $9::bytea[]) WITH ORDINALITY AS t(m, d, n)
        ORDER BY t.n
      )`
-    : '';
+    : "";
   const { rows } = await query(
     `WITH item AS (
        INSERT INTO items (finder_id, title, category, location, is_sensitive)
@@ -85,9 +138,18 @@ export async function createItem(req, res) {
        SELECT item.id, t.q, t.a FROM item, unnest($6::text[], $7::text[]) AS t(q, a)
      )${photoInsert}
      SELECT * FROM item`,
-    [req.user.id, title, category, location, sensitive,
-     questions.map((q) => q.question), questions.map((q) => q.answer),
-     ...(photos.length ? [photos.map((p) => p.mimetype), photos.map((p) => p.buffer)] : [])]
+    [
+      req.user.id,
+      title,
+      category,
+      location,
+      sensitive,
+      questions.map((q) => q.question),
+      questions.map((q) => q.answer),
+      ...(photos.length
+        ? [photos.map((p) => p.mimetype), photos.map((p) => p.buffer)]
+        : []),
+    ],
   );
   res.status(201).json({ ...rows[0], routedToSecurity: sensitive });
 }
@@ -100,7 +162,7 @@ function cleanDraft(b) {
     title: clean(b.title),
     building: clean(b.building),
     detail: clean(b.detail),
-    category: CATEGORIES.includes(b.category) ? b.category : 'Other',
+    category: CATEGORIES.includes(b.category) ? b.category : "Other",
     sensitive: b.sensitive === true,
     questions: (Array.isArray(b.questions) ? b.questions : [])
       .slice(0, MAX_QUESTIONS)
@@ -112,7 +174,7 @@ function cleanDraft(b) {
 export async function getDraft(req, res) {
   const { rows } = await query(
     `SELECT data, updated_at AS "updatedAt" FROM drafts WHERE user_id = $1`,
-    [req.user.id]
+    [req.user.id],
   );
   res.json(rows[0] ? { ...rows[0].data, updatedAt: rows[0].updatedAt } : null);
 }
@@ -124,14 +186,14 @@ export async function saveDraft(req, res) {
     `INSERT INTO drafts (user_id, data) VALUES ($1, $2)
      ON CONFLICT (user_id) DO UPDATE SET data = EXCLUDED.data, updated_at = now()
      RETURNING updated_at AS "updatedAt"`,
-    [req.user.id, draft]
+    [req.user.id, draft],
   );
   res.json({ ...draft, updatedAt: rows[0].updatedAt });
 }
 
 // DELETE /items/draft: throw the draft away (also done after posting).
 export async function deleteDraft(req, res) {
-  await query('DELETE FROM drafts WHERE user_id = $1', [req.user.id]);
+  await query("DELETE FROM drafts WHERE user_id = $1", [req.user.id]);
   res.status(204).end();
 }
 
@@ -140,7 +202,7 @@ export async function listMine(req, res) {
   const { rows } = await query(
     `SELECT ${PUBLIC_FIELDS}, is_sensitive AS "isSensitive" FROM items
      WHERE finder_id = $1 ORDER BY id DESC`,
-    [req.user.id]
+    [req.user.id],
   );
   res.json(rows);
 }
@@ -148,13 +210,23 @@ export async function listMine(req, res) {
 // DELETE /items/:id: only the finder can delete, and not once someone has
 // claimed it (the claim history has to stay). Private questions go with it.
 export async function deleteItem(req, res) {
-  const { rows } = await query('SELECT finder_id FROM items WHERE id = $1', [req.params.id]);
-  if (!rows[0]) return res.status(404).json({ error: 'Item not found' });
-  if (rows[0].finder_id !== req.user.id) return res.status(403).json({ error: 'You can only delete your own posts' });
+  const { rows } = await query("SELECT finder_id FROM items WHERE id = $1", [
+    req.params.id,
+  ]);
+  if (!rows[0]) return res.status(404).json({ error: "Item not found" });
+  if (rows[0].finder_id !== req.user.id)
+    return res
+      .status(403)
+      .json({ error: "You can only delete your own posts" });
   const { rowCount } = await query(
     `DELETE FROM items WHERE id = $1 AND NOT EXISTS (SELECT 1 FROM claims WHERE item_id = $1)`,
-    [req.params.id]
+    [req.params.id],
   );
-  if (!rowCount) return res.status(409).json({ error: 'Someone has already claimed this item, so it cannot be deleted' });
+  if (!rowCount)
+    return res
+      .status(409)
+      .json({
+        error: "Someone has already claimed this item, so it cannot be deleted",
+      });
   res.status(204).end();
 }

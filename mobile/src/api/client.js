@@ -35,11 +35,24 @@ const post = (path, body, token) => send("POST", path, body, token);
 // The newest public items, one page at a time: { items, hasMore }.
 // q = search text, category = a category name or "All", before = the id of the
 // last item already shown (to get the next page). The server does the filtering.
-export function fetchItems({ q, category, before } = {}) {
+export function fetchItems({
+  q,
+  category,
+  before,
+  location,
+  dateFrom,
+  dateTo,
+} = {}) {
   const params = new URLSearchParams();
+
   if (q) params.set("q", q);
   if (category && category !== "All") params.set("category", category);
   if (before) params.set("before", before);
+
+  if (location) params.set("location", location);
+  if (dateFrom) params.set("dateFrom", dateFrom);
+  if (dateTo) params.set("dateTo", dateTo);
+
   return send("GET", `/items?${params}`);
 }
 
