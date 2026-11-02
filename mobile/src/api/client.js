@@ -55,12 +55,13 @@ export const requestCode = (email) => post("/auth/request-code", { email });
 export const verifyCode = (email, code, challenge) =>
   post("/auth/verify-code", { email, code, challenge });
 
-// Post a found item: { title, category, location, questions: [{ question, answer }] },
+// Post a found item: { title, category, location, latitude?, longitude?, questions: [{ question, answer }] },
 // plus optional photos (up to 3 File objects), which are sent as a multipart form.
 export function createItem({ photos = [], ...item }, token) {
   if (!photos.length) return post("/items", item, token);
   const form = new FormData();
   for (const [key, value] of Object.entries(item)) {
+    if (value == null) continue; // a form would send null as the text "null"
     form.append(key, key === "questions" ? JSON.stringify(value) : value);
   }
   photos.forEach((photo) => form.append("photos", photo));
@@ -68,7 +69,7 @@ export function createItem({ photos = [], ...item }, token) {
 }
 
 // The user's unfinished post, kept on the server (one per user), or null:
-// { title, building, detail, category, questions }. Photos aren't saved in drafts.
+// { title, location, latitude, longitude, category, questions }. Photos aren't saved in drafts.
 export const fetchDraft = (token) => send("GET", "/items/draft", undefined, token);
 export const putDraft = (draft, token) => send("PUT", "/items/draft", draft, token);
 export const deleteDraft = (token) => send("DELETE", "/items/draft", undefined, token);

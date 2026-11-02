@@ -1,7 +1,7 @@
 // Checks a new post before it is saved. Kept free of Express and the database
 // so the rules can be unit tested.
 
-// Same list the app offers (mobile/src/data/options.js, minus 'All'). Keep them in sync.
+// The app gets these from GET /items/options, so this is the only list to edit.
 export const CATEGORIES = ['Bags', 'Bottles', 'Clothing', 'Electronics', 'Keys', 'Other'];
 export const MAX_QUESTIONS = 3;
 // A student can have this many posts that haven't been handed off at once.
@@ -20,6 +20,12 @@ const SIGNATURES = {
 export const PHOTO_TYPES = Object.keys(SIGNATURES);
 
 export const clean = (v, max = 200) => String(v ?? '').trim().slice(0, max);
+
+// One GPS coordinate, or null when missing or out of range (JSON: number, multipart: string).
+export const coord = (v, limit) => {
+  const n = v == null || v === '' ? NaN : Number(v);
+  return Number.isFinite(n) && Math.abs(n) <= limit ? n : null;
+};
 
 export const isRealImage = (file) =>
   !!SIGNATURES[file.mimetype] &&
@@ -51,12 +57,18 @@ export function checkItem(body, files = []) {
 
   // The finder says it's an ID, card, wallet or phone (JSON: true, multipart: "true").
   const sensitive = body.sensitive === true || body.sensitive === 'true';
+  // GPS pin from the finder's device. Optional (they may block location access),
+  // but if one half is sent both must be valid.
+  const latitude = coord(body.latitude, 90);
+  const longitude = coord(body.longitude, 180);
+  const pinSent = (body.latitude ?? '') !== '' || (body.longitude ?? '') !== '';
 
   const errors = {};
   if (!title) errors.title = 'Say what the item is.';
-  if (!location) errors.location = 'Say where you found it.';
+  if (!location) errors.location = 'Describe where you found it.';
+  else if (pinSent && (latitude === null || longitude === null)) errors.location = 'That GPS position is not valid. Try again.';
   if (!CATEGORIES.includes(category)) errors.category = `Pick one of: ${CATEGORIES.join(', ')}.`;
   if (!questions.length) errors.questions = 'Add at least one private question with its answer.';
   if (!files.every(isRealImage)) errors.photos = 'One of the photos is not a JPEG, PNG, WebP or GIF image.';
-  return { item: { title, location, category, questions, sensitive }, errors };
+  return { item: { title, location, latitude, longitude, category, questions, sensitive }, errors };
 }

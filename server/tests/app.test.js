@@ -91,6 +91,18 @@ test('checkItem names each missing or wrong field', () => {
   assert.equal(checkItem({ ...goodPost, category: undefined }).item.category, 'Other');
 });
 
+test('checkItem keeps an optional GPS pin and rejects a broken one', () => {
+  const pin = { latitude: '49.2504', longitude: '-123.0016' }; // multipart sends strings
+  assert.deepEqual(checkItem(goodPost).item.latitude, null);
+  const { item, errors } = checkItem({ ...goodPost, ...pin });
+  assert.deepEqual(errors, {});
+  assert.deepEqual([item.latitude, item.longitude], [49.2504, -123.0016]);
+  const errorsFor = (changes) => Object.keys(checkItem({ ...goodPost, ...changes }).errors);
+  assert.deepEqual(errorsFor({ latitude: '49.25' }), ['location']); // half a pin
+  assert.deepEqual(errorsFor({ ...pin, latitude: '91' }), ['location']);
+  assert.deepEqual(errorsFor({ ...pin, longitude: 'abc' }), ['location']);
+});
+
 test('checkItem reads questions sent as JSON text (multipart posts)', () => {
   const { errors } = checkItem({ ...goodPost, questions: JSON.stringify(goodPost.questions) });
   assert.deepEqual(errors, {});

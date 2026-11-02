@@ -1,9 +1,9 @@
 import { query } from '../config/db.js';
-import { CATEGORIES, MAX_OPEN_POSTS, MAX_QUESTIONS, checkItem, clean } from '../services/itemValidation.js';
+import { CATEGORIES, MAX_OPEN_POSTS, MAX_QUESTIONS, checkItem, clean, coord } from '../services/itemValidation.js';
 
 // Public fields ONLY. Private questions/answers are never selected here,
 // and sensitive items (IDs, cards, phones) are excluded from the public list.
-const PUBLIC_FIELDS = `id, title, category, location, created_at AS "postedAt", status`;
+const PUBLIC_FIELDS = `id, title, category, location, latitude, longitude, created_at AS "postedAt", status`;
 
 const PAGE_SIZE = 30;
 // Escapes % and _ so a search for "50%" matches those characters literally.
@@ -41,7 +41,7 @@ export async function getItem(req, res) {
   res.json(rows[0]);
 }
 
-// POST /items  { title, category, location, sensitive?, questions: [{ question, answer }] }
+// POST /items  { title, category, location, latitude?, longitude?, sensitive?, questions: [{ question, answer }] }
 // Sent as JSON, or as a multipart form with up to 3 "photos" (questions as a JSON string).
 // Needs login. Incomplete posts get 400 with { error, fields: { field: message } }.
 // The item, its private questions and its photos go in with ONE statement, so
@@ -64,28 +64,28 @@ export async function createItem(req, res) {
     return res.status(429).json({ error: `You already have ${MAX_OPEN_POSTS} open posts. Delete one before posting another.` });
   }
 
-  const { title, category, location, questions } = item;
+  const { title, category, location, latitude, longitude, questions } = item;
   const { sensitive } = item;
   // Only mention item_images when there are photos, so posting without photos
   // keeps working on a database that doesn't have that table yet.
   const photoInsert = photos.length
     ? `, imgs AS (
        INSERT INTO item_images (item_id, mime_type, data)
-       SELECT item.id, t.m, t.d FROM item, unnest($8::text[], $9::bytea[]) WITH ORDINALITY AS t(m, d, n)
+       SELECT item.id, t.m, t.d FROM item, unnest($10::text[], $11::bytea[]) WITH ORDINALITY AS t(m, d, n)
        ORDER BY t.n
      )`
     : '';
   const { rows } = await query(
     `WITH item AS (
-       INSERT INTO items (finder_id, title, category, location, is_sensitive)
-       VALUES ($1, $2, $3, $4, $5)
+       INSERT INTO items (finder_id, title, category, location, is_sensitive, latitude, longitude)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
        RETURNING ${PUBLIC_FIELDS}
      ), qs AS (
        INSERT INTO item_questions (item_id, question, expected_answer)
-       SELECT item.id, t.q, t.a FROM item, unnest($6::text[], $7::text[]) AS t(q, a)
+       SELECT item.id, t.q, t.a FROM item, unnest($8::text[], $9::text[]) AS t(q, a)
      )${photoInsert}
      SELECT * FROM item`,
-    [req.user.id, title, category, location, sensitive,
+    [req.user.id, title, category, location, sensitive, latitude, longitude,
      questions.map((q) => q.question), questions.map((q) => q.answer),
      ...(photos.length ? [photos.map((p) => p.mimetype), photos.map((p) => p.buffer)] : [])]
   );
@@ -94,12 +94,13 @@ export async function createItem(req, res) {
 
 // Drafts: one unfinished post per user, kept apart from items so a draft is
 // never listed publicly. Only its owner can read it. Photos aren't kept in drafts.
-// Shape: { title, building, detail, category, sensitive, questions: [{ question, answer }] }.
+// Shape: { title, location, latitude, longitude, category, sensitive, questions: [{ question, answer }] }.
 function cleanDraft(b) {
   return {
     title: clean(b.title),
-    building: clean(b.building),
-    detail: clean(b.detail),
+    location: clean(b.location),
+    latitude: coord(b.latitude, 90),
+    longitude: coord(b.longitude, 180),
     category: CATEGORIES.includes(b.category) ? b.category : 'Other',
     sensitive: b.sensitive === true,
     questions: (Array.isArray(b.questions) ? b.questions : [])
