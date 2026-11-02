@@ -9,7 +9,9 @@ CREATE TABLE IF NOT EXISTS items (
   finder_id           INTEGER NOT NULL REFERENCES users(id),
   title               TEXT NOT NULL,            -- public general description
   category            TEXT,
-  location            TEXT,
+  location            TEXT,                     -- finder's description of the spot
+  latitude            DOUBLE PRECISION CHECK (latitude BETWEEN -90 AND 90),     -- GPS pin, optional
+  longitude           DOUBLE PRECISION CHECK (longitude BETWEEN -180 AND 180),
   is_sensitive        BOOLEAN NOT NULL DEFAULT FALSE,  -- ID/card/phone -> security only
   status              TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'claim pending', 'handed off')),
   created_at          TIMESTAMPTZ NOT NULL DEFAULT now()  -- when it was posted
@@ -34,7 +36,7 @@ CREATE TABLE IF NOT EXISTS item_images (
 -- PRIVATE: one unfinished post per user. Kept out of items so drafts are never public.
 CREATE TABLE IF NOT EXISTS drafts (
   user_id    INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
-  data       JSONB NOT NULL,  -- { title, building, detail, category, questions }
+  data       JSONB NOT NULL,  -- { title, location, latitude, longitude, category, questions }
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 

@@ -166,10 +166,7 @@ export default function HomeScreen({ navigation }) {
           <ItemCard
             item={item}
             onPress={() =>
-              navigation.navigate("ItemDetail", {
-                id: item.id,
-                title: item.title,
-              })
+              navigation.navigate("ItemDetail", item)
             }
           />
         )}

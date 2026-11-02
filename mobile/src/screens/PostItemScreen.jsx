@@ -2,8 +2,6 @@ import { useContext, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { AuthContext } from "../context/AuthContext";
 import { createItem, deleteDraft, fetchDraft, fetchOptions, putDraft } from "../api/client";
-import { buildings } from "../data/options";
-import BuildingPicker from "../components/BuildingPicker";
 import CategoryChips from "../components/CategoryChips";
 import { colors, spacing, type } from "../theme";
 
@@ -14,18 +12,33 @@ const PHOTO_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
 const PLACEHOLDER = colors.placeholder;
 const EMPTY_QA = { question: "", answer: "" };
 
-// Stored as one string, e.g. "Library, 2nd floor", so search still matches it.
-const toLocation = (building, detail) => (detail.trim() ? `${building}, ${detail.trim()}` : building);
+// How long to wait for a GPS fix, and how old a cached one may be.
+const GEO_OPTIONS = { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 };
+const pinLabel = (pin) => `GPS pin saved${pin.accuracy ? ` (within ${pin.accuracy} m)` : ""}`;
+
+// Message for when the device can't give a position. err.code is one of
+// err.PERMISSION_DENIED (1), err.POSITION_UNAVAILABLE (2) or err.TIMEOUT (3).
+function describeGeoError(err) {
+  switch (err.code) {
+    case 1:
+      return "Location is blocked for this site. You can allow it in your browser settings, or just describe the spot below.";
+    case 3:
+      return "Finding your location took too long. Tap the button to try again, or describe the spot below.";
+    default:
+      return "Your device couldn't find your location here. Describe the spot below instead.";
+  }
+}
+
 // The server only saves questions that have both parts filled in.
 const isComplete = (q) => !!(q.question.trim() && q.answer.trim());
 const isPartial = (q) => !isComplete(q) && !!(q.question.trim() || q.answer.trim());
 
 // Same checks the server makes. Returns { field: message } for anything wrong;
-// the field names match the server's (location = the building picker).
-function checkForm({ title, building, questions }) {
+// the field names match the server's. The GPS pin is optional.
+function checkForm({ title, location, questions }) {
   const errors = {};
   if (!title.trim()) errors.title = "Say what the item is.";
-  if (!building) errors.location = "Pick the building where you found it.";
+  if (!location.trim()) errors.location = "Describe where you found it.";
   if (!questions.some(isComplete)) errors.questions = "Add at least one private question with its answer.";
   return errors;
 }
@@ -73,8 +86,9 @@ export default function PostItemScreen({ navigation }) {
   const { user } = useContext(AuthContext);
   const [loading, setLoading] = useState(true); // checking the server for a saved draft
   const [title, setTitle] = useState("");
-  const [building, setBuilding] = useState(""); // picked from the list
-  const [detail, setDetail] = useState(""); // optional: floor, room, landmark
+  const [location, setLocation] = useState(""); // the finder's description of the spot
+  const [pin, setPin] = useState(null); // { latitude, longitude, accuracy? } from the device, or null
+  const [locating, setLocating] = useState(false); // waiting for the device's position
   const [category, setCategory] = useState("Other");
   const [sensitive, setSensitive] = useState(false); // an ID, card, wallet or phone: kept off the public list
   // What the server offers. Until it answers (or if it can't), the form has no
@@ -108,8 +122,8 @@ export default function PostItemScreen({ navigation }) {
       .then((draft) => {
         if (!active || !draft) return;
         setTitle(draft.title ?? "");
-        setBuilding(draft.building ?? "");
-        setDetail(draft.detail ?? "");
+        setLocation(draft.location ?? "");
+        setPin(draft.latitude != null ? { latitude: draft.latitude, longitude: draft.longitude } : null);
         setCategory(draft.category ?? "Other");
         setSensitive(!!draft.sensitive);
         setQuestions(draft.questions?.length ? draft.questions : [EMPTY_QA]);
@@ -138,6 +152,26 @@ export default function PostItemScreen({ navigation }) {
     clearError("questions");
   };
 
+  // Ask the device where it is. The browser asks the user for permission the first time.
+  function locate() {
+    if (!navigator.geolocation) {
+      return setFieldErrors((fe) => ({ ...fe, location: describeGeoError({ code: 2 }) }));
+    }
+    setLocating(true);
+    navigator.geolocation.getCurrentPosition(
+      ({ coords }) => {
+        setPin({ latitude: coords.latitude, longitude: coords.longitude, accuracy: Math.round(coords.accuracy) });
+        clearError("location");
+        setLocating(false);
+      },
+      (err) => {
+        setFieldErrors((fe) => ({ ...fe, location: describeGeoError(err) }));
+        setLocating(false);
+      },
+      GEO_OPTIONS
+    );
+  }
+
   function addPhotos(files) {
     const room = MAX_PHOTOS - photos.length;
     const ok = files.filter((f) => PHOTO_TYPES.includes(f.type) && f.size <= MAX_PHOTO_MB * 1024 * 1024);
@@ -160,7 +194,10 @@ export default function PostItemScreen({ navigation }) {
     setNotice("");
     setBusy(true);
     try {
-      await putDraft({ title, building, detail, category, sensitive, questions }, user.token);
+      await putDraft(
+        { title, location, latitude: pin?.latitude, longitude: pin?.longitude, category, sensitive, questions },
+        user.token
+      );
       setHasDraft(true);
       setNotice(
         photos.length
@@ -188,8 +225,8 @@ export default function PostItemScreen({ navigation }) {
     }
     photos.forEach((p) => URL.revokeObjectURL(p.uri));
     setTitle("");
-    setBuilding("");
-    setDetail("");
+    setLocation("");
+    setPin(null);
     setCategory("Other");
     setSensitive(false);
     setQuestions([EMPTY_QA]);
@@ -203,7 +240,7 @@ export default function PostItemScreen({ navigation }) {
   function review() {
     setError("");
     setNotice("");
-    const errors = checkForm({ title, building, questions });
+    const errors = checkForm({ title, location, questions });
     setFieldErrors(errors);
     if (Object.keys(errors).length) return setError("Fix the fields marked above first.");
     setReviewing(true);
@@ -216,11 +253,19 @@ export default function PostItemScreen({ navigation }) {
 
   async function submit() {
     setError("");
-    const location = toLocation(building, detail);
     setBusy(true);
     try {
       const posted = await createItem(
-        { title, category, location, sensitive, questions, photos: photos.map((p) => p.file) },
+        {
+          title,
+          category,
+          location,
+          latitude: pin?.latitude,
+          longitude: pin?.longitude,
+          sensitive,
+          questions,
+          photos: photos.map((p) => p.file),
+        },
         user.token
       );
       deleteDraft(user.token).catch(() => {}); // posted, so the draft is no longer needed
@@ -275,7 +320,11 @@ export default function PostItemScreen({ navigation }) {
         <Text style={styles.value}>{title.trim()}</Text>
 
         <Text style={styles.label}>Where did you find it?</Text>
-        <Text style={styles.value}>{toLocation(building, detail)}</Text>
+        <Text style={styles.value}>
+          {location.trim()}
+          {"\n"}
+          <Text style={type.meta}>{pin ? pinLabel(pin) : "No GPS pin"}</Text>
+        </Text>
 
         <Text style={styles.label}>Category</Text>
         <Text style={styles.value}>{category}</Text>
@@ -352,20 +401,32 @@ export default function PostItemScreen({ navigation }) {
       {sensitive ? <Text style={[type.meta, styles.checkHint]}>It won't be listed publicly. Hand it in to Campus Security.</Text> : null}
 
       <Text style={styles.label}>Where did you find it?</Text>
-      <BuildingPicker
-        buildings={buildings}
-        selected={building}
-        onSelect={(b) => {
-          setBuilding(b);
-          clearError("location");
-        }}
-      />
+      {pin ? (
+        <View style={styles.pinRow}>
+          <Text style={[type.body, styles.pinText]}>✓ {pinLabel(pin)}</Text>
+          <Pressable onPress={() => setPin(null)} accessibilityRole="button" accessibilityLabel="Remove GPS pin">
+            <Text style={styles.link}>Remove</Text>
+          </Pressable>
+        </View>
+      ) : (
+        <Pressable
+          style={[styles.secondary, styles.locate, locating && styles.disabled]}
+          onPress={locate}
+          disabled={locating}
+          accessibilityRole="button"
+        >
+          <Text style={styles.secondaryText}>{locating ? "Finding you..." : "📍 Use my current location"}</Text>
+        </Pressable>
+      )}
       <TextInput
         placeholderTextColor={PLACEHOLDER}
-        style={[styles.input, styles.detail]}
-        placeholder="Floor or room, e.g. 2nd floor (optional)"
-        value={detail}
-        onChangeText={setDetail}
+        style={[styles.input, styles.detail, fieldErrors.location && styles.inputError]}
+        placeholder="Describe the spot, e.g. SE12 2nd floor, by the vending machines"
+        value={location}
+        onChangeText={(v) => {
+          setLocation(v);
+          clearError("location");
+        }}
       />
       <FieldError message={fieldErrors.location} />
 
@@ -475,6 +536,9 @@ const styles = StyleSheet.create({
   checkHint: { marginTop: -spacing.sm, marginBottom: spacing.md },
   fieldError: { color: "#B00020", marginTop: -spacing.sm, marginBottom: spacing.md },
   detail: { marginTop: spacing.md },
+  locate: { marginTop: 0 },
+  pinRow: { flexDirection: "row", alignItems: "center", gap: spacing.md },
+  pinText: { flexShrink: 1, color: colors.teal },
   qa: { marginTop: spacing.md },
   intro: { marginTop: spacing.xs, marginBottom: spacing.lg },
   value: { ...type.body, marginBottom: spacing.lg },
