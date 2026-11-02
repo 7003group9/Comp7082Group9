@@ -77,5 +77,19 @@ export const deleteDraft = (token) => send("DELETE", "/items/draft", undefined, 
 // The logged-in user's own posts (including ID/card/phone items kept off the public list).
 export const fetchMyItems = (token) => send("GET", "/items/mine", undefined, token);
 
+// The claim form for an item: { questions: [{ id, question }], myClaim }. myClaim is
+// 'pending', 'approved' or 'rejected' if you already claimed it (one try per item), else null.
+export const fetchClaimForm = (itemId, token) => send("GET", `/items/${itemId}/questions`, undefined, token);
+
+// Claim an item: answers = [{ questionId, answer }]. Campus Security checks them later.
+export const submitClaim = (itemId, answers, token) => post("/claims", { itemId, answers }, token);
+
+// Campus Security only: pending claims with each answer beside the expected one,
+// [{ id, itemId, title, location, claimantEmail, matches, answers: [{ question, expected, answer, matches }] }].
+export const fetchClaimsToReview = (token) => send("GET", "/claims/review", undefined, token);
+
+// Campus Security only: decision is "approved" or "rejected".
+export const decideClaim = (claimId, decision, token) => post(`/claims/${claimId}/decision`, { decision }, token);
+
 // Delete one of your own posts.
 export const deleteItem = (id, token) => send("DELETE", `/items/${id}`, undefined, token);

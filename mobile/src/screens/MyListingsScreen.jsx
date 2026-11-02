@@ -5,8 +5,8 @@ import { AuthContext } from "../context/AuthContext";
 import { deleteItem, fetchMyItems } from "../api/client";
 import { colors, spacing, type } from "../theme";
 
-// The items I posted, each with a delete button.
-// TODO: also show incoming claims to review.
+// The items I posted, each with a delete button. Claims on them are reviewed by
+// Campus Security, not the finder.
 export default function MyListingsScreen() {
   const { user } = useContext(AuthContext);
   const [items, setItems] = useState([]);
