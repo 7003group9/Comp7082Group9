@@ -31,7 +31,7 @@ function useDebounced(value, ms) {
 }
 
 export default function HomeScreen({ navigation }) {
-  const { logout } = useContext(AuthContext);
+  const { user, logout } = useContext(AuthContext);
 
   // items: what's shown; hasMore: the server has older ones; loading: first load;
   // loadingMore / refreshing: next page / pull-to-refresh; error: message to show;
@@ -114,6 +114,11 @@ export default function HomeScreen({ navigation }) {
         <Text style={styles.brand}>Campus Claim</Text>
 
         <View style={styles.links}>
+          {user.role === "security" ? (
+            <Pressable onPress={() => navigation.navigate("SecurityDashboard")}>
+              <Text style={styles.logout}>Review claims</Text>
+            </Pressable>
+          ) : null}
           <Pressable onPress={() => navigation.navigate("MyListings")}>
             <Text style={styles.logout}>My posts</Text>
           </Pressable>

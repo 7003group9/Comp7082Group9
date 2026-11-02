@@ -9,6 +9,7 @@ import LoginScreen from "./src/screens/LoginScreen";
 import ItemDetailScreen from "./src/screens/ItemDetailScreen";
 import PostItemScreen from "./src/screens/PostItemScreen";
 import MyListingsScreen from "./src/screens/MyListingsScreen";
+import SecurityDashboardScreen from "./src/screens/SecurityDashboardScreen";
 import { colors } from "./src/theme";
 import { AuthProvider, AuthContext } from "./src/context/AuthContext";
 import { useContext } from "react";
@@ -61,6 +62,15 @@ function AppNavigator() {
               component={MyListingsScreen}
               options={{ title: "My posts" }}
             />
+
+            {/* Campus Security only; the server also refuses everyone else. */}
+            {user.role === "security" ? (
+              <Stack.Screen
+                name="SecurityDashboard"
+                component={SecurityDashboardScreen}
+                options={{ title: "Review claims" }}
+              />
+            ) : null}
           </>
         ) : (
           <Stack.Screen

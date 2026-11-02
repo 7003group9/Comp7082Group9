@@ -7,8 +7,8 @@ const postedAt = (iso) => new Date(iso).toLocaleString([], { dateStyle: 'medium'
 // A found item styled like a claim ticket: details on the left,
 // a torn-off stub with the item number on the right.
 export default function ItemCard({ item, onPress }) {
-  // Anything not 'open' (e.g. 'claim pending') gets a badge.
-  const pending = item.status !== 'open';
+  // Anything not 'open' gets a badge.
+  const badge = { 'claim pending': 'Claim pending', claimed: 'Claimed' }[item.status];
   return (
     <Pressable
       onPress={onPress}
@@ -20,7 +20,7 @@ export default function ItemCard({ item, onPress }) {
         <Text style={styles.title}>{item.title}</Text>
         <Text style={type.meta}>{item.location}</Text>
         <Text style={type.meta}>{postedAt(item.postedAt)}</Text>
-        {pending && <Text style={styles.pending}>Claim pending</Text>}
+        {badge && <Text style={styles.pending}>{badge}</Text>}
       </View>
       {/* Dashed divider between the details and the stub. */}
       <View style={styles.tear} />
