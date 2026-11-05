@@ -13,7 +13,7 @@ CREATE TABLE IF NOT EXISTS items (
   latitude            DOUBLE PRECISION CHECK (latitude BETWEEN -90 AND 90),     -- GPS pin, optional
   longitude           DOUBLE PRECISION CHECK (longitude BETWEEN -180 AND 180),
   is_sensitive        BOOLEAN NOT NULL DEFAULT FALSE,  -- ID/card/phone -> security only
-  status              TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'claim pending', 'handed off')),
+  status              TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'claim pending', 'claimed', 'handed off')),
   created_at          TIMESTAMPTZ NOT NULL DEFAULT now()  -- when it was posted
 );
 
