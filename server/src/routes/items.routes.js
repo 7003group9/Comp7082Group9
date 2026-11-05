@@ -1,7 +1,7 @@
 // /items routes: public list, single item, posting (with photos), drafts, and managing your own posts.
 import { Router } from 'express';
 import {
-  getItems, getFormOptions, getItem, createItem, listMine, deleteItem, getDraft, saveDraft, deleteDraft,
+  getItems, getFormOptions, getItem, editItem, createItem, listMine, deleteItem, getDraft, saveDraft, deleteDraft,
 } from '../controllers/items.controller.js';
 import { requireAuth } from '../middleware/auth.js';
 import { photos } from '../middleware/upload.js';
@@ -20,5 +20,6 @@ router.put('/draft', requireAuth, saveDraft);
 router.delete('/draft', requireAuth, deleteDraft);
 router.get('/:id', getItem);
 router.post('/', requireAuth, photos, createItem); // only logged-in students can post
+router.put('/:id', requireAuth, editItem);
 router.delete('/:id', requireAuth, deleteItem);
 export default router;

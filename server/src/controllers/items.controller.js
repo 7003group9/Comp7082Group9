@@ -1,6 +1,6 @@
 import { query } from '../config/db.js';
 import { CATEGORIES, MAX_OPEN_POSTS, MAX_QUESTIONS, checkItem, clean, coord } from '../services/itemValidation.js';
-import { fetchItems } from '../services/items.service.js';
+import { fetchItems, getItemById, updateItem } from '../services/items.service.js';
 
 // Public fields ONLY. Private questions/answers are never selected here,
 // and sensitive items (IDs, cards, phones) are excluded from the public list.
@@ -38,6 +38,52 @@ export async function getItem(req, res) {
   );
   if (!rows[0]) return res.status(404).json({ error: 'Item not found' });
   res.json(rows[0]);
+}
+
+// PUT /items/:id: only the student who found an item may edit it.
+// Ownership is checked before any update query is executed.
+export async function editItem(req, res) {
+  const item = await getItemById(req.params.id);
+  if (!item) return res.status(404).json({ error: 'Item not found' });
+  if (item.finder_id !== req.user.id) {
+    return res.status(403).json({ error: 'You can only edit your own posts' });
+  }
+
+  const body = req.body ?? {};
+  const changes = {};
+  if (body.title !== undefined) changes.title = clean(body.title);
+  if (body.category !== undefined) changes.category = clean(body.category, 50);
+  if (body.location !== undefined) changes.location = clean(body.location);
+  if (body.latitude !== undefined) changes.latitude = coord(body.latitude, 90);
+  if (body.longitude !== undefined) changes.longitude = coord(body.longitude, 180);
+  if (body.sensitive !== undefined) {
+    changes.sensitive = body.sensitive === true || body.sensitive === 'true';
+  }
+
+  if (changes.category !== undefined && !CATEGORIES.includes(changes.category)) {
+    return res.status(400).json({ error: `Pick one of: ${CATEGORIES.join(', ')}.` });
+  }
+  if (changes.title !== undefined && !changes.title) {
+    return res.status(400).json({ error: 'Say what the item is.' });
+  }
+  if (changes.location !== undefined && !changes.location) {
+    return res.status(400).json({ error: 'Describe where you found it.' });
+  }
+  if (body.latitude !== undefined || body.longitude !== undefined) {
+    const hasCompletePin = body.latitude !== undefined
+      && body.longitude !== undefined
+      && changes.latitude !== null
+      && changes.longitude !== null;
+    if (!hasCompletePin) {
+      return res.status(400).json({ error: 'That GPS position is not valid. Try again.' });
+    }
+  }
+  if (!Object.keys(changes).length) {
+    return res.status(400).json({ error: 'Provide at least one field to update' });
+  }
+
+  const updated = await updateItem(req.params.id, changes);
+  res.json(updated);
 }
 
 // POST /items  { title, category, location, latitude?, longitude?, sensitive?, questions: [{ question, answer }] }
