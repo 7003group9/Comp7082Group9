@@ -1,31 +1,30 @@
 import { query } from '../config/db.js';
 import { CATEGORIES, MAX_OPEN_POSTS, MAX_QUESTIONS, checkItem, clean, coord } from '../services/itemValidation.js';
+import { fetchItems } from '../services/items.service.js';
 
 // Public fields ONLY. Private questions/answers are never selected here,
 // and sensitive items (IDs, cards, phones) are excluded from the public list.
 const PUBLIC_FIELDS = `id, title, category, location, latitude, longitude, created_at AS "postedAt", status`;
 
-const PAGE_SIZE = 30;
-// Escapes % and _ so a search for "50%" matches those characters literally.
-const likePattern = (s) => `%${s.replace(/[\\%_]/g, '\\$&')}%`;
-
-// GET /items?q=&category=&before=<id>: the newest public items, one page at a time.
-// Reply: { items, hasMore }. Pass the last item's id as `before` for the next page.
-// Searching and filtering happen here so they cover every item, not just the page.
-export async function listItems(req, res) {
-  const q = clean(req.query.q, 100);
-  const category = clean(req.query.category, 50);
-  const before = /^\d{1,9}$/.test(req.query.before ?? '') ? Number(req.query.before) : null;
-  const { rows } = await query(
-    `SELECT ${PUBLIC_FIELDS} FROM items
-     WHERE is_sensitive = FALSE AND status <> 'handed off'
-       AND ($1::int IS NULL OR id < $1)
-       AND ($2 = '' OR category = $2)
-       AND ($3 = '' OR title ILIKE $3 OR location ILIKE $3)
-     ORDER BY id DESC LIMIT $4`,
-    [before, category, q ? likePattern(q) : '', PAGE_SIZE + 1]
-  );
-  res.json({ items: rows.slice(0, PAGE_SIZE), hasMore: rows.length > PAGE_SIZE });
+// GET /items: the controller translates query-string input into the service's
+// filter object and leaves SQL construction, parameterization, and pagination
+// details to fetchItems. Invalid dates are reported by the service as 400s;
+// database failures continue through Express's error handler.
+export async function getItems(req, res) {
+  // Keep query-string cleanup at the HTTP boundary so the service receives
+  // bounded strings while still applying the same rules for every caller.
+  const result = await fetchItems({
+    q: clean(req.query.q, 100),
+    category: clean(req.query.category, 50),
+    location: clean(req.query.location, 200),
+    date: clean(req.query.date, 40),
+    dateTo: clean(req.query.dateTo, 40),
+    page: req.query.page,
+    limit: req.query.limit,
+    before: req.query.before,
+  });
+  // The service returns the complete paging response, including hasMore.
+  res.json(result);
 }
 
 // GET /items/options: what the post form and filters offer. The app builds its

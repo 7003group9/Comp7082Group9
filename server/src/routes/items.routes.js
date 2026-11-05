@@ -1,7 +1,7 @@
 // /items routes: public list, single item, posting (with photos), drafts, and managing your own posts.
 import { Router } from 'express';
 import {
-  listItems, getFormOptions, getItem, createItem, listMine, deleteItem, getDraft, saveDraft, deleteDraft,
+  getItems, getFormOptions, getItem, createItem, listMine, deleteItem, getDraft, saveDraft, deleteDraft,
 } from '../controllers/items.controller.js';
 import { requireAuth } from '../middleware/auth.js';
 import { photos } from '../middleware/upload.js';
@@ -11,7 +11,7 @@ const router = Router();
 router.param('id', (req, res, next, id) =>
   /^\d{1,9}$/.test(id) ? next() : res.status(400).json({ error: 'Invalid item id' })
 );
-router.get('/', listItems);
+router.get('/', getItems);
 // '/options', '/mine' and '/draft' must stay above '/:id'.
 router.get('/options', getFormOptions);
 router.get('/mine', requireAuth, listMine);
