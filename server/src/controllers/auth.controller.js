@@ -1,5 +1,5 @@
 import { query } from '../config/db.js';
-import { STUDENT_EMAIL_DOMAIN } from '../config/env.js';
+import { STUDENT_EMAIL_DOMAIN, TEST_LOGINS } from '../config/env.js';
 import { issueCode, checkCode, forgetCode } from '../services/loginCodes.js';
 import { sendLoginCode } from '../services/mailer.js';
 import { signToken } from '../services/token.js';
@@ -17,7 +17,7 @@ export async function requestCode(req, res) {
   const issued = issueCode(email);
   if (!issued) return res.status(429).json({ error: 'A code was just sent. Wait a minute before asking again.' });
   try {
-    await sendLoginCode(email, issued.code);
+    if (!TEST_LOGINS.has(email)) await sendLoginCode(email, issued.code); // test accounts know their code
   } catch (err) {
     // The student never got this code, so don't make them wait a minute to retry.
     console.error(err);

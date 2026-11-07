@@ -3,6 +3,7 @@ import { Router } from 'express';
 import {
   listItems, getFormOptions, getItem, createItem, listMine, deleteItem, getDraft, saveDraft, deleteDraft,
 } from '../controllers/items.controller.js';
+import { claimForm } from '../controllers/claims.controller.js';
 import { requireAuth } from '../middleware/auth.js';
 import { photos } from '../middleware/upload.js';
 
@@ -19,6 +20,7 @@ router.get('/draft', requireAuth, getDraft);
 router.put('/draft', requireAuth, saveDraft);
 router.delete('/draft', requireAuth, deleteDraft);
 router.get('/:id', getItem);
+router.get('/:id/questions', requireAuth, claimForm); // the claim form: question text only
 router.post('/', requireAuth, photos, createItem); // only logged-in students can post
 router.delete('/:id', requireAuth, deleteItem);
 export default router;

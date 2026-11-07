@@ -189,6 +189,42 @@ test('my posts and delete need login', async () => {
   server.close();
 });
 
+test('claiming needs login and a real item id', async () => {
+  const server = app.listen(0);
+  const base = `http://localhost:${server.address().port}`;
+  const auth = { Authorization: `Bearer ${signToken({ id: 1, role: 'student' })}` };
+  const claim = (body, headers = {}) =>
+    fetch(`${base}/claims`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...headers },
+      body: JSON.stringify(body),
+    });
+  try {
+    assert.equal((await claim({ itemId: 1, answers: [] })).status, 401);
+    assert.equal((await fetch(`${base}/items/1/questions`)).status, 401);
+    assert.equal((await claim({ itemId: 'abc', answers: [] }, auth)).status, 400);
+    assert.equal((await fetch(`${base}/items/abc/questions`, { headers: auth })).status, 400);
+  } finally {
+    server.close();
+  }
+});
+
+test('only Campus Security can review and decide claims', async () => {
+  const server = app.listen(0);
+  const base = `http://localhost:${server.address().port}`;
+  const as = (role) => ({ Authorization: `Bearer ${signToken({ id: 1, role })}`, 'Content-Type': 'application/json' });
+  const decide = (headers, body) =>
+    fetch(`${base}/claims/1/decision`, { method: 'POST', headers, body: JSON.stringify(body) });
+  try {
+    assert.equal((await fetch(`${base}/claims/review`)).status, 401);
+    assert.equal((await fetch(`${base}/claims/review`, { headers: as('student') })).status, 403);
+    assert.equal((await decide(as('student'), { decision: 'approved' })).status, 403);
+    assert.equal((await decide(as('security'), { decision: 'maybe' })).status, 400);
+  } finally {
+    server.close();
+  }
+});
+
 test('the finder can mark a post sensitive themselves', () => {
   assert.equal(checkItem(goodPost).item.sensitive, false);
   assert.equal(checkItem({ ...goodPost, sensitive: true }).item.sensitive, true);
