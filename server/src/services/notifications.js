@@ -1,2 +1,2 @@
-// TODO: notify finder (new claim), claimant (approved/rejected), security (sensitive item).
+// TODO: notify finder (new claim), claimant (approved/rejected).
 export const notify = async () => {};

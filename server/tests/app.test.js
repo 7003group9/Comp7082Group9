@@ -6,7 +6,7 @@ import { verifyClaim } from '../src/services/claimVerification.js';
 import { issueCode, checkCode, forgetCode } from '../src/services/loginCodes.js';
 import { errorHandler } from '../src/middleware/errorHandler.js';
 import { signToken, verifyToken } from '../src/services/token.js';
-import { CATEGORIES, MAX_QUESTIONS, checkItem } from '../src/services/itemValidation.js';
+import { BUILDINGS, CATEGORIES, MAX_QUESTIONS, checkItem } from '../src/services/itemValidation.js';
 
 test('GET /health', async () => {
   const server = app.listen(0);
@@ -64,6 +64,8 @@ test('token round-trips and rejects tampering', () => {
 const goodPost = {
   title: 'Black water bottle',
   location: 'NE1, 2nd floor',
+  latitude: 49.2504,
+  longitude: -123.0016,
   category: 'Bottles',
   questions: [{ question: 'What sticker is on it?', answer: 'Red dragon' }],
 };
@@ -91,16 +93,22 @@ test('checkItem names each missing or wrong field', () => {
   assert.equal(checkItem({ ...goodPost, category: undefined }).item.category, 'Other');
 });
 
-test('checkItem keeps an optional GPS pin and rejects a broken one', () => {
+test('checkItem requires a valid GPS pin', () => {
   const pin = { latitude: '49.2504', longitude: '-123.0016' }; // multipart sends strings
-  assert.deepEqual(checkItem(goodPost).item.latitude, null);
   const { item, errors } = checkItem({ ...goodPost, ...pin });
   assert.deepEqual(errors, {});
   assert.deepEqual([item.latitude, item.longitude], [49.2504, -123.0016]);
   const errorsFor = (changes) => Object.keys(checkItem({ ...goodPost, ...changes }).errors);
-  assert.deepEqual(errorsFor({ latitude: '49.25' }), ['location']); // half a pin
-  assert.deepEqual(errorsFor({ ...pin, latitude: '91' }), ['location']);
-  assert.deepEqual(errorsFor({ ...pin, longitude: 'abc' }), ['location']);
+  assert.deepEqual(errorsFor({ latitude: undefined, longitude: undefined }), ['pin']); // no pin
+  assert.deepEqual(errorsFor({ longitude: '' }), ['pin']); // half a pin
+  assert.deepEqual(errorsFor({ latitude: '91' }), ['pin']);
+  assert.deepEqual(errorsFor({ longitude: 'abc' }), ['pin']);
+});
+
+test('the building is optional but must come from the list', () => {
+  assert.equal(checkItem(goodPost).item.building, null);
+  assert.equal(checkItem({ ...goodPost, building: 'SW1' }).item.building, 'SW1');
+  assert.deepEqual(Object.keys(checkItem({ ...goodPost, building: 'Hogwarts' }).errors), ['building']);
 });
 
 test('checkItem reads questions sent as JSON text (multipart posts)', () => {
@@ -225,12 +233,6 @@ test('only Campus Security can review and decide claims', async () => {
   }
 });
 
-test('the finder can mark a post sensitive themselves', () => {
-  assert.equal(checkItem(goodPost).item.sensitive, false);
-  assert.equal(checkItem({ ...goodPost, sensitive: true }).item.sensitive, true);
-  assert.equal(checkItem({ ...goodPost, sensitive: 'true' }).item.sensitive, true); // multipart form
-});
-
 test('only MAX_QUESTIONS questions are kept', () => {
   const many = Array.from({ length: MAX_QUESTIONS + 2 }, (_, i) => ({ question: `q${i}`, answer: 'a' }));
   assert.equal(checkItem({ ...goodPost, questions: many }).item.questions.length, MAX_QUESTIONS);
@@ -241,7 +243,7 @@ test('form options are public and match what posts accept', async () => {
   try {
     const res = await fetch(`http://localhost:${server.address().port}/items/options`);
     assert.equal(res.status, 200);
-    assert.deepEqual(await res.json(), { categories: CATEGORIES, maxQuestions: MAX_QUESTIONS });
+    assert.deepEqual(await res.json(), { categories: CATEGORIES, buildings: BUILDINGS, maxQuestions: MAX_QUESTIONS });
   } finally {
     server.close();
   }

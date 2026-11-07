@@ -10,14 +10,17 @@ CREATE TABLE IF NOT EXISTS items (
   title               TEXT NOT NULL,            -- public general description
   category            TEXT,
   location            TEXT,                     -- finder's description of the spot
+  building            TEXT,                     -- campus building, optional (BUILDINGS in itemValidation.js)
   latitude            DOUBLE PRECISION CHECK (latitude BETWEEN -90 AND 90),     -- GPS pin, optional
   longitude           DOUBLE PRECISION CHECK (longitude BETWEEN -180 AND 180),
-  is_sensitive        BOOLEAN NOT NULL DEFAULT FALSE,  -- ID/card/phone -> security only
   status              TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'claim pending', 'claimed', 'handed off')),  -- claimed = a claim was approved
   created_at          TIMESTAMPTZ NOT NULL DEFAULT now()  -- when it was posted
 );
--- CREATE TABLE IF NOT EXISTS skips tables that already exist, so re-apply the
--- status check to give older databases the 'claimed' status too.
+-- CREATE TABLE IF NOT EXISTS skips tables that already exist, so older
+-- databases are updated here: the "ID, card, wallet or phone" flag was removed,
+-- the building column was added, and the status check gains 'claimed'.
+ALTER TABLE items DROP COLUMN IF EXISTS is_sensitive;
+ALTER TABLE items ADD COLUMN IF NOT EXISTS building TEXT;
 ALTER TABLE items DROP CONSTRAINT IF EXISTS items_status_check;
 ALTER TABLE items ADD CONSTRAINT items_status_check
   CHECK (status IN ('open', 'claim pending', 'claimed', 'handed off'));
