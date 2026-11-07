@@ -13,11 +13,17 @@ CREATE TABLE IF NOT EXISTS items (
   latitude            DOUBLE PRECISION CHECK (latitude BETWEEN -90 AND 90),     -- GPS pin, optional
   longitude           DOUBLE PRECISION CHECK (longitude BETWEEN -180 AND 180),
   is_sensitive        BOOLEAN NOT NULL DEFAULT FALSE,  -- ID/card/phone -> security only
-  status              TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'claim pending', 'handed off')),
+  status              TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'claim pending', 'claimed', 'handed off')),  -- claimed = a claim was approved
   created_at          TIMESTAMPTZ NOT NULL DEFAULT now()  -- when it was posted
 );
+-- CREATE TABLE IF NOT EXISTS skips tables that already exist, so re-apply the
+-- status check to give older databases the 'claimed' status too.
+ALTER TABLE items DROP CONSTRAINT IF EXISTS items_status_check;
+ALTER TABLE items ADD CONSTRAINT items_status_check
+  CHECK (status IN ('open', 'claim pending', 'claimed', 'handed off'));
 
--- PRIVATE: never returned by public item endpoints
+-- PRIVATE: expected_answer never leaves the server. Only the question text is
+-- shown, to a logged-in claimant on the claim form.
 CREATE TABLE IF NOT EXISTS item_questions (
   id              SERIAL PRIMARY KEY,
   item_id         INTEGER NOT NULL REFERENCES items(id) ON DELETE CASCADE,
@@ -68,6 +74,10 @@ CREATE INDEX IF NOT EXISTS item_questions_item_idx ON item_questions (item_id);
 CREATE INDEX IF NOT EXISTS item_images_item_idx ON item_images (item_id);
 CREATE INDEX IF NOT EXISTS claims_item_idx ON claims (item_id);
 CREATE INDEX IF NOT EXISTS claims_claimant_idx ON claims (claimant_id);
+-- One try per item: a person can only ever claim the same item once, even if rejected.
+CREATE UNIQUE INDEX IF NOT EXISTS claims_one_per_user ON claims (item_id, claimant_id);
+-- An item has at most one approved claim, even if two staff approve at the same moment.
+CREATE UNIQUE INDEX IF NOT EXISTS claims_one_approved ON claims (item_id) WHERE status = 'approved';
 CREATE INDEX IF NOT EXISTS claim_answers_claim_idx ON claim_answers (claim_id);
 CREATE INDEX IF NOT EXISTS claim_answers_question_idx ON claim_answers (question_id);
 CREATE INDEX IF NOT EXISTS handoffs_claim_idx ON handoffs (claim_id);
