@@ -14,7 +14,7 @@ const CLAIM_STATUS = {
 // One found item from the list, and the claim form: the finder's private
 // questions (text only, never the answers). Campus Security reviews each claim.
 export default function ItemDetailScreen({ route }) {
-  const { id, title, location, latitude, longitude } = route.params;
+  const { id, title, location, building, latitude, longitude } = route.params;
   const { user } = useContext(AuthContext);
   const [form, setForm] = useState(null); // { questions, myClaim } from the server
   const [unavailable, setUnavailable] = useState(''); // why this item can't be claimed
@@ -85,7 +85,7 @@ export default function ItemDetailScreen({ route }) {
     <ScrollView style={styles.scroll} contentContainerStyle={styles.screen} keyboardShouldPersistTaps="handled">
       <Text style={type.heading}>{title}</Text>
       <Text style={[type.meta, { marginTop: spacing.sm }]}>Item No. {id}</Text>
-      {location ? <Text style={[type.body, { marginTop: spacing.md }]}>Found at: {location}</Text> : null}
+      {location ? <Text style={[type.body, { marginTop: spacing.md }]}>Found at: {[building, location].filter(Boolean).join(' · ')}</Text> : null}
       {latitude != null ? (
         <Pressable
           onPress={() => Linking.openURL(`https://www.google.com/maps?q=${latitude},${longitude}`)}

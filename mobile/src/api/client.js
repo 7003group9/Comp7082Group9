@@ -35,12 +35,13 @@ const post = (path, body, token) => send("POST", path, body, token);
 // The newest public items, one page at a time: { items, hasMore }.
 // q = search text, category = a category name or "All", before = the id of the
 // last item already shown (to get the next page). The server does the filtering.
-export function fetchItems({ q, category, before } = {}) {
+// With the login token, the user's own posts are left out (they're in My posts).
+export function fetchItems({ q, category, before } = {}, token) {
   const params = new URLSearchParams();
   if (q) params.set("q", q);
   if (category && category !== "All") params.set("category", category);
   if (before) params.set("before", before);
-  return send("GET", `/items?${params}`);
+  return send("GET", `/items?${params}`, undefined, token);
 }
 
 // What the post form and filters offer: { categories, maxQuestions }.

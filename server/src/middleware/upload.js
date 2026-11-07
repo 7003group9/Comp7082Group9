@@ -13,8 +13,8 @@ const upload = multer({
 
 const LIMIT_MESSAGES = {
   LIMIT_FILE_SIZE: `Each photo must be ${MAX_PHOTO_BYTES / 1024 / 1024} MB or smaller`,
-  LIMIT_FILE_COUNT: `You can add up to ${MAX_PHOTOS} photos`,
-  LIMIT_UNEXPECTED_FILE: `You can add up to ${MAX_PHOTOS} photos`,
+  LIMIT_FILE_COUNT: 'You can only add one photo',
+  LIMIT_UNEXPECTED_FILE: 'You can only add one photo',
 };
 
 // Reads up to 3 photos from a multipart form field named "photos" into req.files

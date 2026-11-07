@@ -67,7 +67,7 @@ export default function MyListingsScreen() {
             <Text style={type.heading}>{item.title}</Text>
             <Text style={type.meta}>{item.location}</Text>
             <Text style={type.meta}>
-              No. {item.id} · {item.isSensitive ? "With Campus Security" : item.status}
+              No. {item.id} · {item.status}
             </Text>
           </View>
           <Pressable

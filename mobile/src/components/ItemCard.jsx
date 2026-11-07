@@ -4,29 +4,41 @@ import { colors, spacing, type } from '../theme';
 // Turns an ISO date into the viewer's local date and time, e.g. "Oct 11, 2026, 3:28 PM".
 const postedAt = (iso) => new Date(iso).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' });
 
+// How long ago it was posted, for the stub: [big text, small text under it].
+// "Now", "5m ago", "3h ago", "2d ago", then the date ("12 Oct") after a week.
+function age(iso, now = Date.now()) {
+  const mins = Math.floor((now - new Date(iso)) / 60000);
+  if (mins < 1) return ['Now', ''];
+  if (mins < 60) return [`${mins}m`, 'ago'];
+  if (mins < 60 * 24) return [`${Math.floor(mins / 60)}h`, 'ago'];
+  if (mins < 60 * 24 * 7) return [`${Math.floor(mins / (60 * 24))}d`, 'ago'];
+  const date = new Date(iso);
+  return [String(date.getDate()), date.toLocaleString([], { month: 'short' })];
+}
+
 // A found item styled like a claim ticket: details on the left,
-// a torn-off stub with the item number on the right.
+// a torn-off stub with how long ago it was posted on the right.
 export default function ItemCard({ item, onPress }) {
   // Anything not 'open' gets a badge.
   const badge = { 'claim pending': 'Claim pending', claimed: 'Claimed' }[item.status];
+  const [ageValue, ageLabel] = age(item.postedAt);
   return (
     <Pressable
       onPress={onPress}
       accessibilityRole="button"
-      accessibilityLabel={`${item.title}, found at ${item.location}, ${postedAt(item.postedAt)}`}
+      accessibilityLabel={`${item.title}, found at ${[item.building, item.location].filter(Boolean).join(' · ')}, ${postedAt(item.postedAt)}`}
       style={({ pressed }) => [styles.card, pressed && styles.pressed]}
     >
       <View style={styles.main}>
         <Text style={styles.title}>{item.title}</Text>
-        <Text style={type.meta}>{item.location}</Text>
-        <Text style={type.meta}>{postedAt(item.postedAt)}</Text>
+        <Text style={type.meta}>{[item.building, item.location].filter(Boolean).join(' · ')}</Text>
         {badge && <Text style={styles.pending}>{badge}</Text>}
       </View>
       {/* Dashed divider between the details and the stub. */}
       <View style={styles.tear} />
       <View style={styles.stub}>
-        <Text style={styles.no}>No.</Text>
-        <Text style={styles.noValue}>{item.id}</Text>
+        <Text style={styles.ageValue}>{ageValue}</Text>
+        {ageLabel ? <Text style={styles.ageLabel}>{ageLabel}</Text> : null}
       </View>
     </Pressable>
   );
@@ -67,6 +79,6 @@ const styles = StyleSheet.create({
     borderColor: colors.line,
   },
   stub: { width: 72, alignItems: 'center', justifyContent: 'center' },
-  no: { fontSize: 13, color: colors.slate },
-  noValue: { fontSize: 20, fontWeight: '700', color: colors.teal },
+  ageValue: { fontSize: 20, fontWeight: '700', color: colors.teal },
+  ageLabel: { fontSize: 13, color: colors.slate },
 });

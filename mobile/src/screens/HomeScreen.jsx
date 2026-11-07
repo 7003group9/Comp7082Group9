@@ -55,7 +55,7 @@ export default function HomeScreen({ navigation }) {
   const loadFirst = useCallback(async () => {
     const mine = ++latest.current;
     try {
-      const page = await fetchItems({ q: search, category });
+      const page = await fetchItems({ q: search, category }, user.token);
       if (mine !== latest.current) return;
       setItems(page.items);
       setHasMore(page.hasMore);
@@ -63,7 +63,7 @@ export default function HomeScreen({ navigation }) {
     } catch (e) {
       if (mine === latest.current) setError(e.message);
     }
-  }, [search, category]);
+  }, [search, category, user.token]);
 
   // The filter chips. The list still works if this fails (only "All" shows).
   const loadCategories = () =>
@@ -88,7 +88,7 @@ export default function HomeScreen({ navigation }) {
     const mine = latest.current;
     setLoadingMore(true);
     try {
-      const page = await fetchItems({ q: search, category, before: items[items.length - 1].id });
+      const page = await fetchItems({ q: search, category, before: items[items.length - 1].id }, user.token);
       if (mine !== latest.current) return; // the search changed while this was loading
       setItems((prev) => [...prev, ...page.items]);
       setHasMore(page.hasMore);

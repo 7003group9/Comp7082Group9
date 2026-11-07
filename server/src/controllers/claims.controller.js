@@ -11,7 +11,7 @@ import { verifyClaim } from '../services/claimVerification.js';
 async function findItem(id) {
   const { rows } = await query(
     `SELECT finder_id AS "finderId", status IN ('claimed', 'handed off') AS closed
-     FROM items WHERE id = $1 AND is_sensitive = FALSE`,
+     FROM items WHERE id = $1`,
     [id]
   );
   return rows[0];
