@@ -12,7 +12,7 @@ const RED = '#B00020';
 // one, so staff can compare them and decide. An approved claim stays here until
 // the finder hands the item in and staff press "Received at the security desk".
 // Every button needs a second tap, since each step is final.
-export default function SecurityDashboardScreen() {
+export default function SecurityDashboardScreen({ navigation }) {
   const { user } = useContext(AuthContext);
   const [claims, setClaims] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -101,6 +101,13 @@ export default function SecurityDashboardScreen() {
           </Text>
           <Text style={[type.meta, styles.gap]}>Claimed by {claim.claimantEmail}</Text>
           <StatusLabel claim={claim.status} />
+          <Pressable
+            onPress={() => navigation.navigate('ClaimDetail', { claim })}
+            accessibilityRole="button"
+            accessibilityLabel={`View claim by ${claim.claimantEmail}`}
+          >
+            <Text style={styles.details}>View details ›</Text>
+          </Pressable>
 
           {claim.answers.map((a, i) => (
             <View key={a.questionId} style={styles.qa}>
@@ -138,6 +145,7 @@ const styles = StyleSheet.create({
   qa: { marginTop: spacing.md, gap: 2 },
   question: { ...type.body, fontWeight: '600' },
   approved: { ...type.body, fontWeight: '600', color: colors.teal, marginTop: spacing.md },
+  details: { color: colors.teal, fontWeight: '600', marginTop: spacing.sm },
   actions: { flexDirection: 'row', gap: spacing.md, marginTop: spacing.md },
   action: { flex: 1, borderWidth: 2, borderRadius: 8, padding: spacing.sm, alignItems: 'center' },
   actionText: { fontSize: 16, fontWeight: '700' },

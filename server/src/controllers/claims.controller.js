@@ -90,7 +90,9 @@ export async function claimsToReview(req, res) {
   const { rows } = await query(
     `SELECT c.id, c.status, c.item_id AS "itemId", i.title, i.location, u.school_email AS "claimantEmail",
             json_agg(json_build_object('questionId', q.id, 'question', q.question,
-                     'expected', q.expected_answer, 'answer', a.answer) ORDER BY q.id) AS answers
+                     'expected', q.expected_answer, 'answer', a.answer) ORDER BY q.id) AS answers,
+            (SELECT count(*)::int FROM claims r
+             WHERE r.claimant_id = c.claimant_id AND r.status = 'rejected') AS "rejectedBefore"
      FROM claims c
      JOIN items i ON i.id = c.item_id
      JOIN users u ON u.id = c.claimant_id
