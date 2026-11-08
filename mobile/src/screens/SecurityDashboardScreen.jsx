@@ -2,20 +2,21 @@ import { useCallback, useContext, useEffect, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { AuthContext } from '../context/AuthContext';
-import { decideClaim, fetchClaimsToReview } from '../api/client';
+import { decideClaim, fetchClaimsToReview, markReceived } from '../api/client';
 import { colors, spacing, type } from '../theme';
 
 const RED = '#B00020';
 
 // Campus Security only: pending claims, each answer beside the finder's expected
-// one. "Matches" ignores case and spacing and is only a hint; staff decide.
-// Approve and Reject each need a second tap, since a decision is final.
+// one, so staff can compare them and decide. An approved claim stays here until
+// the finder hands the item in and staff press "Received at the security desk".
+// Every button needs a second tap, since each step is final.
 export default function SecurityDashboardScreen() {
   const { user } = useContext(AuthContext);
   const [claims, setClaims] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [confirm, setConfirm] = useState(null); // { id, decision } waiting for a second tap
+  const [confirm, setConfirm] = useState(null); // { id, decision } waiting for a second tap ('received' too)
   const [busyId, setBusyId] = useState(null);
 
   // Reload whenever the screen is shown.
@@ -41,11 +42,21 @@ export default function SecurityDashboardScreen() {
     setError('');
     setBusyId(claim.id);
     try {
-      await decideClaim(claim.id, decision, user.token);
-      // Approving also rejects the other claims on that item, so drop them too.
-      setClaims((list) =>
-        list.filter((c) => c.id !== claim.id && !(decision === 'approved' && c.itemId === claim.itemId))
-      );
+      if (decision === 'received') {
+        await markReceived(claim.itemId, user.token);
+        setClaims((list) => list.filter((c) => c.id !== claim.id)); // done with it
+      } else {
+        await decideClaim(claim.id, decision, user.token);
+        // Approving rejects the other claims on that item, so drop them; the approved
+        // one stays, waiting for the item to be received. A rejected one goes.
+        setClaims((list) =>
+          decision === 'approved'
+            ? list
+                .filter((c) => c.itemId !== claim.itemId || c.id === claim.id)
+                .map((c) => (c.id === claim.id ? { ...c, status: 'approved' } : c))
+            : list.filter((c) => c.id !== claim.id)
+        );
+      }
     } catch (e) {
       setError(e.message);
     } finally {
@@ -93,20 +104,21 @@ export default function SecurityDashboardScreen() {
             <View key={a.questionId} style={styles.qa}>
               <Text style={styles.question}>{`${i + 1}. ${a.question}`}</Text>
               <Text style={type.body}>Expected: {a.expected}</Text>
-              <Text style={type.body}>
-                Answered: {a.answer}{' '}
-                <Text style={{ color: a.matches ? colors.teal : RED }}>{a.matches ? '✓' : '✗'}</Text>
-              </Text>
+              <Text style={type.body}>Answered: {a.answer}</Text>
             </View>
           ))}
-          <Text style={[styles.verdict, { color: claim.matches ? colors.teal : RED }]}>
-            {claim.matches ? 'All answers match' : "Some answers don't match"}
-          </Text>
 
-          <View style={styles.actions}>
-            {button(claim, 'approved', 'Approve', colors.teal)}
-            {button(claim, 'rejected', 'Reject', RED)}
-          </View>
+          {claim.status === 'approved' ? (
+            <>
+              <Text style={styles.approved}>Approved. Waiting for the finder to drop it off.</Text>
+              <View style={styles.actions}>{button(claim, 'received', '✓ Received at the security desk', colors.teal)}</View>
+            </>
+          ) : (
+            <View style={styles.actions}>
+              {button(claim, 'approved', 'Approve', colors.teal)}
+              {button(claim, 'rejected', 'Reject', RED)}
+            </View>
+          )}
         </View>
       )}
     />
@@ -123,7 +135,7 @@ const styles = StyleSheet.create({
   gap: { marginTop: spacing.xs },
   qa: { marginTop: spacing.md, gap: 2 },
   question: { ...type.body, fontWeight: '600' },
-  verdict: { fontWeight: '700', marginTop: spacing.md },
+  approved: { ...type.body, fontWeight: '600', color: colors.teal, marginTop: spacing.md },
   actions: { flexDirection: 'row', gap: spacing.md, marginTop: spacing.md },
   action: { flex: 1, borderWidth: 2, borderRadius: 8, padding: spacing.sm, alignItems: 'center' },
   actionText: { fontSize: 16, fontWeight: '700' },

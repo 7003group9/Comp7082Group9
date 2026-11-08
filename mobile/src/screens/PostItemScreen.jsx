@@ -1,7 +1,7 @@
 import { useContext, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { AuthContext } from "../context/AuthContext";
-import { createItem, deleteDraft, fetchDraft, fetchOptions, putDraft } from "../api/client";
+import { createItem, deleteDraft, fetchDraft, fetchItemForEdit, fetchOptions, putDraft, updateItem } from "../api/client";
 import BuildingPicker from "../components/BuildingPicker";
 import CategoryChips from "../components/CategoryChips";
 import { colors, spacing, type } from "../theme";
@@ -84,7 +84,10 @@ function Thumbnails({ photos, onRemove }) {
 
 // Form for a finder to post a found item: public description, location,
 // category, photos, and private questions only the real owner could answer.
-export default function PostItemScreen({ navigation }) {
+// With route.params.editId it edits that post instead: the form is filled from
+// the server, there are no drafts or photos, and saving goes back to My posts.
+export default function PostItemScreen({ navigation, route }) {
+  const editId = route.params?.editId;
   const { user } = useContext(AuthContext);
   const [loading, setLoading] = useState(true); // checking the server for a saved draft
   const [title, setTitle] = useState("");
@@ -115,11 +118,14 @@ export default function PostItemScreen({ navigation }) {
       .catch(() => {});
   }, []);
 
-  // Restore the draft saved on the server, if any. If it can't be loaded,
-  // start with an empty form; posting still works.
+  const [loadError, setLoadError] = useState(""); // editing: why the post couldn't be opened
+
+  // Editing: load the post (answers included). Posting: restore the draft saved on
+  // the server, if any; if it can't be loaded, start with an empty form.
   useEffect(() => {
     let active = true;
-    fetchDraft(user.token)
+    if (editId) navigation.setOptions({ title: "Edit post" });
+    (editId ? fetchItemForEdit(editId, user.token) : fetchDraft(user.token))
       .then((draft) => {
         if (!active || !draft) return;
         setTitle(draft.title ?? "");
@@ -128,15 +134,16 @@ export default function PostItemScreen({ navigation }) {
         setBuilding(draft.building ?? "");
         setCategory(draft.category ?? "Other");
         setQuestions(draft.questions?.length ? draft.questions : [EMPTY_QA]);
+        if (editId) return;
         setHasDraft(true);
         setNotice("Your saved draft was restored.");
       })
-      .catch(() => {})
+      .catch((err) => editId && active && setLoadError(err.message)) // e.g. someone claimed it
       .finally(() => active && setLoading(false));
     return () => {
       active = false;
     };
-  }, [user.token]);
+  }, [user.token, editId, navigation]);
 
   // Free the photo previews when leaving the page.
   const photosRef = useRef(photos);
@@ -255,20 +262,14 @@ export default function PostItemScreen({ navigation }) {
   async function submit() {
     setError("");
     setBusy(true);
+    const post = { title, category, location, building, latitude: pin?.latitude, longitude: pin?.longitude, questions };
     try {
-      await createItem(
-        {
-          title,
-          category,
-          location,
-          building,
-          latitude: pin?.latitude,
-          longitude: pin?.longitude,
-          questions,
-          photos: photos.map((p) => p.file),
-        },
-        user.token
-      );
+      if (editId) {
+        await updateItem(editId, post, user.token);
+        navigation.goBack(); // My posts reloads when it comes back into view
+        return;
+      }
+      await createItem({ ...post, photos: photos.map((p) => p.file) }, user.token);
       deleteDraft(user.token).catch(() => {}); // posted, so the draft is no longer needed
       navigation.navigate("Home"); // the list reloads when it comes back into view
     } catch (err) {
@@ -287,6 +288,14 @@ export default function PostItemScreen({ navigation }) {
     return (
       <View style={[styles.screen, styles.center]}>
         <ActivityIndicator color={colors.teal} />
+      </View>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <View style={styles.screen}>
+        <Text style={styles.error}>{loadError}</Text>
       </View>
     );
   }
@@ -342,7 +351,7 @@ export default function PostItemScreen({ navigation }) {
         {error ? <Text style={styles.error}>{error}</Text> : null}
 
         <Pressable style={[styles.button, busy && styles.disabled]} onPress={submit} disabled={busy}>
-          <Text style={styles.buttonText}>{busy ? "Posting..." : "Submit"}</Text>
+          <Text style={styles.buttonText}>{busy ? "Saving..." : editId ? "Save changes" : "Submit"}</Text>
         </Pressable>
         <Pressable style={[styles.secondary, busy && styles.disabled]} onPress={edit} disabled={busy}>
           <Text style={styles.secondaryText}>Edit</Text>
@@ -432,17 +441,21 @@ export default function PostItemScreen({ navigation }) {
       )}
       <FieldError message={fieldErrors.category} />
 
-      <Text style={[styles.label, styles.gap]}>Photograph</Text>
-      <Text style={type.meta}>
-        Don't show anything that gives away your private answers, like a sticker or what's inside.
-      </Text>
-      <Thumbnails photos={photos} onRemove={removePhoto} />
-      {photos.length < MAX_PHOTOS ? (
-        <Pressable style={[styles.secondary, styles.addButton]} onPress={() => pickFiles(addPhotos)} accessibilityRole="button">
-          <Text style={styles.secondaryText}>+ Add photo</Text>
-        </Pressable>
-      ) : null}
-      <FieldError message={fieldErrors.photos} />
+      {editId ? null : (
+        <>
+          <Text style={[styles.label, styles.gap]}>Photograph</Text>
+          <Text style={type.meta}>
+            Don't show anything that gives away your private answers, like a sticker or what's inside.
+          </Text>
+          <Thumbnails photos={photos} onRemove={removePhoto} />
+          {photos.length < MAX_PHOTOS ? (
+            <Pressable style={[styles.secondary, styles.addButton]} onPress={() => pickFiles(addPhotos)} accessibilityRole="button">
+              <Text style={styles.secondaryText}>+ Add photo</Text>
+            </Pressable>
+          ) : null}
+          <FieldError message={fieldErrors.photos} />
+        </>
+      )}
 
       <Text style={[styles.label, styles.gap]}>Private questions<Text style={styles.required} accessibilityLabel="required"> *</Text></Text>
       <Text style={type.meta}>
@@ -479,12 +492,14 @@ export default function PostItemScreen({ navigation }) {
       {notice ? <Text style={styles.notice}>{notice}</Text> : null}
 
       <Pressable style={[styles.button, busy && styles.disabled]} onPress={review} disabled={busy}>
-        <Text style={styles.buttonText}>Post lost item</Text>
+        <Text style={styles.buttonText}>{editId ? "Review changes" : "Post lost item"}</Text>
       </Pressable>
-      <Pressable style={[styles.secondary, busy && styles.disabled]} onPress={saveDraft} disabled={busy}>
-        <Text style={styles.secondaryText}>Save draft</Text>
-      </Pressable>
-      {hasDraft ? (
+      {editId ? null : (
+        <Pressable style={[styles.secondary, busy && styles.disabled]} onPress={saveDraft} disabled={busy}>
+          <Text style={styles.secondaryText}>Save draft</Text>
+        </Pressable>
+      )}
+      {hasDraft && !editId ? (
         <Pressable onPress={discardDraft} disabled={busy}>
           <Text style={[styles.link, styles.discard]}>Discard draft</Text>
         </Pressable>

@@ -1,16 +1,15 @@
 import { query } from '../config/db.js';
 import { clean } from '../services/itemValidation.js';
-import { verifyClaim } from '../services/claimVerification.js';
 
 // Claims are checked by Campus Security, not here and not by the finder: a claim
 // is saved as 'pending' and the claimant is never told whether their answers
 // matched, so the form can't be used to guess them. One claim per person per item.
 
-// A public item, with closed = true once a claim on it was approved ('claimed')
-// or it was handed off. Undefined if there's no such public item.
+// A public item, with closed = true once a claim on it was approved ('claimed',
+// then 'dropped off' and 'handed off'). Undefined if there's no such item.
 async function findItem(id) {
   const { rows } = await query(
-    `SELECT finder_id AS "finderId", status IN ('claimed', 'handed off') AS closed
+    `SELECT finder_id AS "finderId", status IN ('claimed', 'dropped off', 'handed off') AS closed
      FROM items WHERE id = $1`,
     [id]
   );
@@ -85,11 +84,11 @@ export async function createClaim(req, res) {
 }
 
 // GET /claims/review (security only): every pending claim, oldest first, with the
-// claimant's email and each answer next to the expected one. matches is
-// verifyClaim's view (case and spacing ignored), a hint only: staff decide.
+// claimant's email and each answer next to the expected one. Staff compare them and decide.
+// Approved claims stay listed (status 'approved') until the item is received at the desk.
 export async function claimsToReview(req, res) {
   const { rows } = await query(
-    `SELECT c.id, c.item_id AS "itemId", i.title, i.location, u.school_email AS "claimantEmail",
+    `SELECT c.id, c.status, c.item_id AS "itemId", i.title, i.location, u.school_email AS "claimantEmail",
             json_agg(json_build_object('questionId', q.id, 'question', q.question,
                      'expected', q.expected_answer, 'answer', a.answer) ORDER BY q.id) AS answers
      FROM claims c
@@ -97,19 +96,11 @@ export async function claimsToReview(req, res) {
      JOIN users u ON u.id = c.claimant_id
      JOIN claim_answers a ON a.claim_id = c.id
      JOIN item_questions q ON q.id = a.question_id
-     WHERE c.status = 'pending'
+     WHERE c.status = 'pending' OR (c.status = 'approved' AND i.status = 'claimed')
      GROUP BY c.id, i.id, u.id
      ORDER BY c.id`
   );
-  const matches = (list) =>
-    verifyClaim(list.map((x) => ({ id: x.questionId, expected_answer: x.expected })), list);
-  res.json(
-    rows.map((c) => ({
-      ...c,
-      answers: c.answers.map((x) => ({ ...x, matches: matches([x]) })),
-      matches: matches(c.answers),
-    }))
-  );
+  res.json(rows);
 }
 
 // POST /claims/:id/decision { decision: 'approved' | 'rejected' } (security only).
@@ -131,7 +122,8 @@ export async function decideClaim(req, res) {
          WHERE claim.status = 'approved' AND claims.item_id = claim.item_id
            AND claims.id <> claim.id AND claims.status = 'pending'
        ), item AS (
-         UPDATE items SET status = CASE claim.status WHEN 'approved' THEN 'claimed' ELSE 'open' END
+         UPDATE items SET status = CASE claim.status WHEN 'approved' THEN 'claimed' ELSE 'open' END,
+                          claimed_at = CASE claim.status WHEN 'approved' THEN now() END
          FROM claim
          WHERE items.id = claim.item_id AND items.status = 'claim pending'
            AND (claim.status = 'approved'

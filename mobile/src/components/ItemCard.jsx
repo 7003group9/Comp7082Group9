@@ -6,7 +6,7 @@ const postedAt = (iso) => new Date(iso).toLocaleString([], { dateStyle: 'medium'
 
 // How long ago it was posted, for the stub: [big text, small text under it].
 // "Now", "5m ago", "3h ago", "2d ago", then the date ("12 Oct") after a week.
-function age(iso, now = Date.now()) {
+export function age(iso, now = Date.now()) {
   const mins = Math.floor((now - new Date(iso)) / 60000);
   if (mins < 1) return ['Now', ''];
   if (mins < 60) return [`${mins}m`, 'ago'];
@@ -16,11 +16,21 @@ function age(iso, now = Date.now()) {
   return [String(date.getDate()), date.toLocaleString([], { month: 'short' })];
 }
 
+// Status badge for anything not 'open'. Claimed items are green. The person whose
+// claim was approved sees "Approved", then "Ready to collect" once the finder has
+// dropped it off; the finder (mine, in My posts) sees "Dropped off"; others see "Claimed".
+export function StatusBadge({ item, mine = false }) {
+  const done = (text) => <Text style={[styles.pending, styles.done]}>{text}</Text>;
+  const approved = item.myClaim === 'approved';
+  if (item.status === 'claimed') return done(approved ? 'Approved' : 'Claimed');
+  if (item.status === 'dropped off') return done(mine ? 'Dropped off' : approved ? 'Ready to collect' : 'Claimed');
+  if (item.status === 'claim pending') return <Text style={styles.pending}>Claim pending</Text>;
+  return null;
+}
+
 // A found item styled like a claim ticket: details on the left,
 // a torn-off stub with how long ago it was posted on the right.
 export default function ItemCard({ item, onPress }) {
-  // Anything not 'open' gets a badge.
-  const badge = { 'claim pending': 'Claim pending', claimed: 'Claimed' }[item.status];
   const [ageValue, ageLabel] = age(item.postedAt);
   return (
     <Pressable
@@ -32,7 +42,7 @@ export default function ItemCard({ item, onPress }) {
       <View style={styles.main}>
         <Text style={styles.title}>{item.title}</Text>
         <Text style={type.meta}>{[item.building, item.location].filter(Boolean).join(' · ')}</Text>
-        {badge && <Text style={styles.pending}>{badge}</Text>}
+        <StatusBadge item={item} />
       </View>
       {/* Dashed divider between the details and the stub. */}
       <View style={styles.tear} />
@@ -71,6 +81,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     overflow: 'hidden',
   },
+  done: { backgroundColor: colors.tagDone },
   tear: {
     width: 0,
     marginVertical: spacing.md,

@@ -3,11 +3,12 @@ import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from "
 import { useFocusEffect } from "@react-navigation/native";
 import { AuthContext } from "../context/AuthContext";
 import { deleteItem, fetchMyItems } from "../api/client";
+import { StatusBadge, age } from "../components/ItemCard";
 import { colors, spacing, type } from "../theme";
 
 // The items I posted, each with a delete button. Claims on them are reviewed by
 // Campus Security, not the finder.
-export default function MyListingsScreen() {
+export default function MyListingsScreen({ navigation }) {
   const { user } = useContext(AuthContext);
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -65,21 +66,40 @@ export default function MyListingsScreen() {
         <View style={styles.card}>
           <View style={styles.info}>
             <Text style={type.heading}>{item.title}</Text>
-            <Text style={type.meta}>{item.location}</Text>
-            <Text style={type.meta}>
-              No. {item.id} · {item.status}
-            </Text>
+            <Text style={type.meta}>{[item.building, item.location].filter(Boolean).join(" · ")}</Text>
+            <Text style={type.meta}>Posted {age(item.postedAt).join(" ").trim().replace(/^Now$/, "just now")}</Text>
+            <StatusBadge item={item} mine />
+            {item.status === "claimed" ? (
+              <Text style={styles.dropOff}>
+                The owner has been confirmed. Please drop this item off at the Campus Security desk as soon as possible.
+              </Text>
+            ) : null}
+            {item.status === "dropped off" ? (
+              <Text style={styles.dropOff}>Thanks! Campus Security has it now.</Text>
+            ) : null}
           </View>
-          <Pressable
-            onPress={() => onDelete(item.id)}
-            disabled={deletingId === item.id}
-            accessibilityRole="button"
-            accessibilityLabel={`Delete ${item.title}`}
-          >
-            <Text style={[styles.delete, confirmId === item.id && styles.deleteConfirm]}>
-              {confirmId === item.id ? "Tap again to confirm" : "Delete"}
-            </Text>
-          </Pressable>
+          {item.status === "open" ? (
+            <Pressable
+              onPress={() => navigation.navigate("PostItem", { editId: item.id })}
+              accessibilityRole="button"
+              accessibilityLabel={`Edit ${item.title}`}
+            >
+              <Text style={styles.edit}>Edit</Text>
+            </Pressable>
+          ) : null}
+          {/* Only open posts can be deleted: once claimed, the claim history has to stay. */}
+          {item.status === "open" ? (
+            <Pressable
+              onPress={() => onDelete(item.id)}
+              disabled={deletingId === item.id}
+              accessibilityRole="button"
+              accessibilityLabel={`Delete ${item.title}`}
+            >
+              <Text style={[styles.delete, confirmId === item.id && styles.deleteConfirm]}>
+                {confirmId === item.id ? "Tap again to confirm" : "Delete"}
+              </Text>
+            </Pressable>
+          ) : null}
         </View>
       )}
     />
@@ -102,6 +122,8 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
   },
   info: { flex: 1, gap: 2 },
+  dropOff: { ...type.meta, color: colors.ink, fontWeight: "600", marginTop: spacing.sm },
+  edit: { color: colors.teal, fontWeight: "600" },
   delete: { color: "#B00020", fontWeight: "600" },
   deleteConfirm: { fontWeight: "700", textDecorationLine: "underline" },
 });

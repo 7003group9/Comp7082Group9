@@ -8,6 +8,7 @@ export const colors = {
   teal: '#0B6E6E',
   tealDark: '#085757',
   tag: '#F4C542',
+  tagDone: '#7FD69A', // green badge: claimed / approved
   line: '#C9D4DC',
   placeholder: '#A5B0BA', // hint text in empty inputs, lighter than typed text
 };

@@ -2,7 +2,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import app from '../src/app.js';
-import { verifyClaim } from '../src/services/claimVerification.js';
 import { issueCode, checkCode, forgetCode } from '../src/services/loginCodes.js';
 import { errorHandler } from '../src/middleware/errorHandler.js';
 import { signToken, verifyToken } from '../src/services/token.js';
@@ -14,13 +13,6 @@ test('GET /health', async () => {
   const res = await fetch(`http://localhost:${port}/health`);
   assert.deepEqual(await res.json(), { ok: true });
   server.close();
-});
-
-test('claim needs every answer right', () => {
-  const qs = [{ id: 1, expected_answer: 'Red dragon' }];
-  assert.equal(verifyClaim(qs, [{ questionId: 1, answer: ' red  DRAGON ' }]), true);
-  assert.equal(verifyClaim(qs, [{ questionId: 1, answer: 'blue' }]), false);
-  assert.equal(verifyClaim(qs, []), false);
 });
 
 test('login code works once, then is used up', () => {
@@ -217,6 +209,22 @@ test('claiming needs login and a real item id', async () => {
   }
 });
 
+test('editing a post needs login and a real item id', async () => {
+  const server = app.listen(0);
+  const base = `http://localhost:${server.address().port}`;
+  const auth = { Authorization: `Bearer ${signToken({ id: 1, role: 'student' })}` };
+  const put = (id, headers = {}) =>
+    fetch(`${base}/items/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json', ...headers }, body: '{}' });
+  try {
+    assert.equal((await put(1)).status, 401);
+    assert.equal((await fetch(`${base}/items/1/edit`)).status, 401);
+    assert.equal((await put('abc', auth)).status, 400);
+    assert.equal((await fetch(`${base}/items/abc/edit`, { headers: auth })).status, 400);
+  } finally {
+    server.close();
+  }
+});
+
 test('only Campus Security can review and decide claims', async () => {
   const server = app.listen(0);
   const base = `http://localhost:${server.address().port}`;
@@ -228,6 +236,9 @@ test('only Campus Security can review and decide claims', async () => {
     assert.equal((await fetch(`${base}/claims/review`, { headers: as('student') })).status, 403);
     assert.equal((await decide(as('student'), { decision: 'approved' })).status, 403);
     assert.equal((await decide(as('security'), { decision: 'maybe' })).status, 400);
+    const received = (headers) => fetch(`${base}/items/1/received`, { method: 'POST', headers });
+    assert.equal((await received({})).status, 401);
+    assert.equal((await received(as('student'))).status, 403);
   } finally {
     server.close();
   }

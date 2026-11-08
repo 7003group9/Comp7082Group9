@@ -57,7 +57,7 @@ export const verifyCode = (email, code, challenge) =>
   post("/auth/verify-code", { email, code, challenge });
 
 // Post a found item: { title, category, location, latitude?, longitude?, questions: [{ question, answer }] },
-// plus optional photos (up to 3 File objects), which are sent as a multipart form.
+// plus an optional photo (a File object in photos), which is sent as a multipart form.
 export function createItem({ photos = [], ...item }, token) {
   if (!photos.length) return post("/items", item, token);
   const form = new FormData();
@@ -75,7 +75,7 @@ export const fetchDraft = (token) => send("GET", "/items/draft", undefined, toke
 export const putDraft = (draft, token) => send("PUT", "/items/draft", draft, token);
 export const deleteDraft = (token) => send("DELETE", "/items/draft", undefined, token);
 
-// The logged-in user's own posts (including ID/card/phone items kept off the public list).
+// The logged-in user's own posts.
 export const fetchMyItems = (token) => send("GET", "/items/mine", undefined, token);
 
 // The claim form for an item: { questions: [{ id, question }], myClaim }. myClaim is
@@ -85,12 +85,22 @@ export const fetchClaimForm = (itemId, token) => send("GET", `/items/${itemId}/q
 // Claim an item: answers = [{ questionId, answer }]. Campus Security checks them later.
 export const submitClaim = (itemId, answers, token) => post("/claims", { itemId, answers }, token);
 
-// Campus Security only: pending claims with each answer beside the expected one,
-// [{ id, itemId, title, location, claimantEmail, matches, answers: [{ question, expected, answer, matches }] }].
+// Campus Security only: pending claims with each answer beside the expected one, plus
+// approved claims whose item hasn't been received at the desk yet (status 'approved').
+// [{ id, status, itemId, title, location, claimantEmail, answers: [{ question, expected, answer }] }].
 export const fetchClaimsToReview = (token) => send("GET", "/claims/review", undefined, token);
 
 // Campus Security only: decision is "approved" or "rejected".
 export const decideClaim = (claimId, decision, token) => post(`/claims/${claimId}/decision`, { decision }, token);
+
+// Editing one of your own posts while nobody has claimed it. fetchItemForEdit gives
+// { title, category, location, building, latitude, longitude, questions: [{ question, answer }] };
+// updateItem saves the same shape back. Photos can't be changed.
+export const fetchItemForEdit = (id, token) => send("GET", `/items/${id}/edit`, undefined, token);
+export const updateItem = (id, item, token) => send("PUT", `/items/${id}`, item, token);
+
+// Campus Security only: the finder handed this claimed item in at the desk. Final.
+export const markReceived = (itemId, token) => post(`/items/${itemId}/received`, undefined, token);
 
 // Delete one of your own posts.
 export const deleteItem = (id, token) => send("DELETE", `/items/${id}`, undefined, token);
