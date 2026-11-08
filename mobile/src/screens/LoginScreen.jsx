@@ -2,7 +2,7 @@ import { useContext, useState } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { AuthContext } from "../context/AuthContext";
 import { requestCode, verifyCode } from "../api/client";
-import { colors, spacing, type } from "../theme";
+import { colors, spacing, type, ui } from "../theme";
 
 // Two-step login: enter student email -> enter the code emailed to it.
 export default function LoginScreen() {
@@ -112,28 +112,14 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     justifyContent: "center",
   },
-  expired: { color: "#B00020", marginTop: spacing.sm },
+  expired: { color: colors.danger, marginTop: spacing.sm },
   hint: { ...type.meta, marginTop: spacing.sm, marginBottom: spacing.lg },
   label: { ...type.body, fontWeight: "600", marginBottom: spacing.xs },
-  input: {
-    backgroundColor: colors.paper,
-    borderWidth: 1,
-    borderColor: colors.slate,
-    borderRadius: 8,
-    padding: spacing.md,
-    marginBottom: spacing.md,
-    fontSize: 16,
-    color: colors.ink,
-  },
-  error: { color: "#B00020", marginBottom: spacing.md },
-  button: {
-    backgroundColor: colors.teal,
-    padding: spacing.md,
-    borderRadius: 8,
-    alignItems: "center",
-  },
-  disabled: { opacity: 0.6 },
-  buttonText: { fontSize: 16, fontWeight: "700", color: colors.paper },
+  input: { ...ui.input, marginBottom: spacing.md },
+  error: { color: colors.danger, marginBottom: spacing.md },
+  button: ui.button,
+  disabled: ui.disabled,
+  buttonText: ui.buttonText,
   link: {
     color: colors.teal,
     textAlign: "center",

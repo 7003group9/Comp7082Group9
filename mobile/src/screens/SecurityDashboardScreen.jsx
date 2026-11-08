@@ -1,11 +1,10 @@
-import { useCallback, useContext, useEffect, useState } from 'react';
+import { useCallback, useContext, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
-import { useFocusEffect } from '@react-navigation/native';
 import { AuthContext } from '../context/AuthContext';
 import { decideClaim, fetchClaimsToReview, markReceived } from '../api/client';
-import { colors, spacing, type } from '../theme';
-
-const RED = '#B00020';
+import StatusLabel from '../components/StatusLabel';
+import { useConfirm, useFocusList } from '../hooks';
+import { colors, spacing, type, ui } from '../theme';
 
 // Campus Security only: pending claims, each answer beside the finder's expected
 // one, so staff can compare them and decide. An approved claim stays here until
@@ -13,32 +12,14 @@ const RED = '#B00020';
 // Every button needs a second tap, since each step is final.
 export default function SecurityDashboardScreen() {
   const { user } = useContext(AuthContext);
-  const [claims, setClaims] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [confirm, setConfirm] = useState(null); // { id, decision } waiting for a second tap ('received' too)
+  const { list: claims, setList: setClaims, loading, error, setError } = useFocusList(
+    useCallback(() => fetchClaimsToReview(user.token), [user.token])
+  );
+  const [confirm, setConfirm] = useConfirm(); // "<claim id>:<decision>" waiting for a second tap
   const [busyId, setBusyId] = useState(null);
 
-  // Reload whenever the screen is shown.
-  useFocusEffect(
-    useCallback(() => {
-      setError('');
-      fetchClaimsToReview(user.token)
-        .then(setClaims)
-        .catch((e) => setError(e.message))
-        .finally(() => setLoading(false));
-    }, [user.token])
-  );
-
-  // An armed "Tap again" lapses after a few seconds.
-  useEffect(() => {
-    if (!confirm) return;
-    const timer = setTimeout(() => setConfirm(null), 4000);
-    return () => clearTimeout(timer);
-  }, [confirm]);
-
   async function onDecide(claim, decision) {
-    if (confirm?.id !== claim.id || confirm.decision !== decision) return setConfirm({ id: claim.id, decision });
+    if (confirm !== `${claim.id}:${decision}`) return setConfirm(`${claim.id}:${decision}`);
     setError('');
     setBusyId(claim.id);
     try {
@@ -68,7 +49,7 @@ export default function SecurityDashboardScreen() {
   if (loading) return <ActivityIndicator style={styles.center} color={colors.teal} />;
 
   const button = (claim, decision, label, color) => {
-    const armed = confirm?.id === claim.id && confirm.decision === decision;
+    const armed = confirm === `${claim.id}:${decision}`;
     return (
       <Pressable
         style={[styles.action, { borderColor: color }, armed && { backgroundColor: color }]}
@@ -77,7 +58,7 @@ export default function SecurityDashboardScreen() {
         accessibilityRole="button"
         accessibilityLabel={`${label} claim by ${claim.claimantEmail}`}
       >
-        <Text style={[styles.actionText, { color: armed ? colors.paper : color }]}>
+        <Text style={[styles.actionText, { color: armed ? colors.onAccent : color }]}>
           {armed ? 'Tap again' : label}
         </Text>
       </Pressable>
@@ -99,6 +80,7 @@ export default function SecurityDashboardScreen() {
             No. {claim.itemId} · {claim.location}
           </Text>
           <Text style={[type.meta, styles.gap]}>Claimed by {claim.claimantEmail}</Text>
+          <StatusLabel claim={claim.status} />
 
           {claim.answers.map((a, i) => (
             <View key={a.questionId} style={styles.qa}>
@@ -116,7 +98,7 @@ export default function SecurityDashboardScreen() {
           ) : (
             <View style={styles.actions}>
               {button(claim, 'approved', 'Approve', colors.teal)}
-              {button(claim, 'rejected', 'Reject', RED)}
+              {button(claim, 'rejected', 'Reject', colors.danger)}
             </View>
           )}
         </View>
@@ -130,8 +112,8 @@ const styles = StyleSheet.create({
   list: { padding: spacing.md },
   center: { marginTop: spacing.xl },
   empty: { textAlign: 'center', color: colors.slate, marginTop: spacing.xl },
-  error: { color: RED, marginBottom: spacing.md },
-  card: { backgroundColor: colors.paper, borderRadius: 12, padding: spacing.md, marginBottom: spacing.md, gap: 2 },
+  error: { color: colors.danger, marginBottom: spacing.md },
+  card: { ...ui.card, padding: spacing.md, marginBottom: spacing.md, gap: 2 },
   gap: { marginTop: spacing.xs },
   qa: { marginTop: spacing.md, gap: 2 },
   question: { ...type.body, fontWeight: '600' },

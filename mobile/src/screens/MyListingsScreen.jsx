@@ -1,39 +1,21 @@
-import { useCallback, useContext, useEffect, useState } from "react";
+import { useCallback, useContext, useState } from "react";
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from "react-native";
-import { useFocusEffect } from "@react-navigation/native";
 import { AuthContext } from "../context/AuthContext";
 import { deleteItem, fetchMyItems } from "../api/client";
-import { StatusBadge, age } from "../components/ItemCard";
-import { colors, spacing, type } from "../theme";
+import { age, where } from "../components/ItemCard";
+import StatusLabel from "../components/StatusLabel";
+import { useConfirm, useFocusList } from "../hooks";
+import { colors, spacing, type, ui } from "../theme";
 
 // The items I posted, each with a delete button. Claims on them are reviewed by
 // Campus Security, not the finder.
 export default function MyListingsScreen({ navigation }) {
   const { user } = useContext(AuthContext);
-  const [items, setItems] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-  const [confirmId, setConfirmId] = useState(null); // item waiting for a second tap
-  const [deletingId, setDeletingId] = useState(null);
-
-  // Reload whenever the screen is shown.
-  useFocusEffect(
-    useCallback(() => {
-      setError("");
-      fetchMyItems(user.token)
-        .then(setItems)
-        .catch((e) => setError(e.message))
-        .finally(() => setLoading(false));
-    }, [user.token]),
+  const { list: items, setList: setItems, loading, error, setError } = useFocusList(
+    useCallback(() => fetchMyItems(user.token), [user.token]),
   );
-
-  // An armed "Tap again to confirm" lapses after a few seconds, so a stray tap
-  // much later can't delete a post.
-  useEffect(() => {
-    if (confirmId === null) return;
-    const timer = setTimeout(() => setConfirmId(null), 4000);
-    return () => clearTimeout(timer);
-  }, [confirmId]);
+  const [confirmId, setConfirmId] = useConfirm(); // item waiting for a second tap
+  const [deletingId, setDeletingId] = useState(null);
 
   // First tap asks "sure?", second tap deletes (works the same on web and phone).
   async function onDelete(id) {
@@ -66,9 +48,9 @@ export default function MyListingsScreen({ navigation }) {
         <View style={styles.card}>
           <View style={styles.info}>
             <Text style={type.heading}>{item.title}</Text>
-            <Text style={type.meta}>{[item.building, item.location].filter(Boolean).join(" · ")}</Text>
+            <Text style={type.meta}>{where(item)}</Text>
             <Text style={type.meta}>Posted {age(item.postedAt).join(" ").trim().replace(/^Now$/, "just now")}</Text>
-            <StatusBadge item={item} mine />
+            <StatusLabel item={item} mine />
             {item.status === "claimed" ? (
               <Text style={styles.dropOff}>
                 The owner has been confirmed. Please drop this item off at the Campus Security desk as soon as possible.
@@ -111,19 +93,11 @@ const styles = StyleSheet.create({
   list: { padding: spacing.md },
   center: { marginTop: spacing.xl },
   empty: { textAlign: "center", color: colors.slate, marginTop: spacing.xl },
-  error: { color: "#B00020", marginBottom: spacing.md },
-  card: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.md,
-    backgroundColor: colors.paper,
-    borderRadius: 12,
-    padding: spacing.md,
-    marginBottom: spacing.md,
-  },
+  error: { color: colors.danger, marginBottom: spacing.md },
+  card: { ...ui.card, flexDirection: "row", alignItems: "center", gap: spacing.md, padding: spacing.md, marginBottom: spacing.md },
   info: { flex: 1, gap: 2 },
   dropOff: { ...type.meta, color: colors.ink, fontWeight: "600", marginTop: spacing.sm },
   edit: { color: colors.teal, fontWeight: "600" },
-  delete: { color: "#B00020", fontWeight: "600" },
+  delete: { color: colors.danger, fontWeight: "600" },
   deleteConfirm: { fontWeight: "700", textDecorationLine: "underline" },
 });

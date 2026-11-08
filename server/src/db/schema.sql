@@ -11,22 +11,12 @@ CREATE TABLE IF NOT EXISTS items (
   category            TEXT,
   location            TEXT,                     -- finder's description of the spot
   building            TEXT,                     -- campus building, optional (BUILDINGS in itemValidation.js)
-  latitude            DOUBLE PRECISION CHECK (latitude BETWEEN -90 AND 90),     -- GPS pin, optional
+  latitude            DOUBLE PRECISION CHECK (latitude BETWEEN -90 AND 90),     -- GPS pin (new posts must have one)
   longitude           DOUBLE PRECISION CHECK (longitude BETWEEN -180 AND 180),
   status              TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'claim pending', 'claimed', 'dropped off', 'handed off')),  -- claimed = a claim was approved; dropped off = the finder left it at Campus Security
   created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),  -- when it was posted
   claimed_at          TIMESTAMPTZ                          -- when a claim was approved; the feed hides it 24h later
 );
--- CREATE TABLE IF NOT EXISTS skips tables that already exist, so older
--- databases are updated here: the "ID, card, wallet or phone" flag was removed,
--- the building column was added, and the status check gains 'claimed' and 'dropped off'.
-ALTER TABLE items DROP COLUMN IF EXISTS is_sensitive;
-ALTER TABLE items ADD COLUMN IF NOT EXISTS building TEXT;
-ALTER TABLE items ADD COLUMN IF NOT EXISTS claimed_at TIMESTAMPTZ;
-UPDATE items SET claimed_at = now() WHERE status = 'claimed' AND claimed_at IS NULL; -- claimed before the column existed
-ALTER TABLE items DROP CONSTRAINT IF EXISTS items_status_check;
-ALTER TABLE items ADD CONSTRAINT items_status_check
-  CHECK (status IN ('open', 'claim pending', 'claimed', 'dropped off', 'handed off'));
 
 -- PRIVATE: expected_answer never leaves the server. Only the question text is
 -- shown, to a logged-in claimant on the claim form.
@@ -37,7 +27,7 @@ CREATE TABLE IF NOT EXISTS item_questions (
   expected_answer TEXT NOT NULL
 );
 
--- Photos of a found item, saved with the post. (Viewing them is a later sprint.)
+-- The photo of a found item, saved with the post. (Viewing it is a later sprint.)
 CREATE TABLE IF NOT EXISTS item_images (
   id        SERIAL PRIMARY KEY,
   item_id   INTEGER NOT NULL REFERENCES items(id) ON DELETE CASCADE,
@@ -48,7 +38,7 @@ CREATE TABLE IF NOT EXISTS item_images (
 -- PRIVATE: one unfinished post per user. Kept out of items so drafts are never public.
 CREATE TABLE IF NOT EXISTS drafts (
   user_id    INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
-  data       JSONB NOT NULL,  -- { title, location, latitude, longitude, category, questions }
+  data       JSONB NOT NULL,  -- { title, location, building, latitude, longitude, category, questions }
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 

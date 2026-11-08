@@ -1,7 +1,7 @@
 import multer from 'multer';
 import { MAX_PHOTOS, MAX_PHOTO_BYTES, PHOTO_TYPES } from '../services/itemValidation.js';
 
-// Photos are kept in memory (max 3 x 5 MB) and saved to the database with the item.
+// The photo is kept in memory (max MAX_PHOTOS x 5 MB) and saved to the database with the item.
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: MAX_PHOTO_BYTES, files: MAX_PHOTOS },
@@ -17,7 +17,7 @@ const LIMIT_MESSAGES = {
   LIMIT_UNEXPECTED_FILE: 'You can only add one photo',
 };
 
-// Reads up to 3 photos from a multipart form field named "photos" into req.files
+// Reads up to MAX_PHOTOS photos from a multipart form field named "photos" into req.files
 // (and the other fields into req.body). JSON requests pass straight through.
 // A bad photo gets 400 in the same { error, fields } shape as the other checks.
 export function photos(req, res, next) {

@@ -1,11 +1,23 @@
 import { query } from '../config/db.js';
-import { verifyToken } from '../services/token.js';
+import { userFrom } from '../middleware/auth.js';
 import { BUILDINGS, CATEGORIES, MAX_OPEN_POSTS, MAX_QUESTIONS, checkItem, clean, coord } from '../services/itemValidation.js';
 
 // Public fields ONLY. Private questions/answers are never selected here.
 const PUBLIC_FIELDS = `id, title, category, location, building, latitude, longitude, created_at AS "postedAt", status`;
 
 const PAGE_SIZE = 30;
+
+// 400 listing each wrong field, in the shape the post form shows under its fields.
+const formErrors = (res, errors) =>
+  res.status(400).json({ error: Object.values(errors).join(' '), fields: errors });
+
+// Sends 404 / 403 and returns false unless item req.params.id exists and the user posted it.
+async function ownItem(req, res, notYours) {
+  const { rows: [item] } = await query('SELECT finder_id FROM items WHERE id = $1', [req.params.id]);
+  if (!item) res.status(404).json({ error: 'Item not found' });
+  else if (item.finder_id !== req.user.id) res.status(403).json({ error: notYours });
+  return item?.finder_id === req.user.id;
+}
 // Escapes % and _ so a search for "50%" matches those characters literally.
 const likePattern = (s) => `%${s.replace(/[\\%_]/g, '\\$&')}%`;
 
@@ -20,7 +32,7 @@ const likePattern = (s) => `%${s.replace(/[\\%_]/g, '\\$&')}%`;
 // myClaim is the viewer's own claim status on each item ('pending', 'approved',
 // 'rejected'), or null if they haven't claimed it or aren't logged in.
 export async function listItems(req, res) {
-  const me = verifyToken(req.headers.authorization?.replace(/^Bearer /, ''))?.id ?? null;
+  const me = userFrom(req)?.id ?? null;
   const q = clean(req.query.q, 100);
   const category = clean(req.query.category, 50);
   const before = /^\d{1,9}$/.test(req.query.before ?? '') ? Number(req.query.before) : null;
@@ -57,16 +69,14 @@ export async function getItem(req, res) {
 }
 
 // POST /items  { title, category, location, building?, latitude, longitude, questions: [{ question, answer }] }
-// Sent as JSON, or as a multipart form with up to 3 "photos" (questions as a JSON string).
+// Sent as JSON, or as a multipart form with one "photos" file (questions as a JSON string).
 // Needs login. Incomplete posts get 400 with { error, fields: { field: message } }.
 // The item, its private questions and its photos go in with ONE statement, so
 // either all are saved or none.
 export async function createItem(req, res) {
   const photos = req.files ?? [];
   const { item, errors } = checkItem(req.body ?? {}, photos);
-  if (Object.keys(errors).length) {
-    return res.status(400).json({ error: Object.values(errors).join(' '), fields: errors });
-  }
+  if (Object.keys(errors).length) return formErrors(res, errors);
 
   // Each student can only have so many posts open at once (dropped off = done with it).
   const { rows: [{ open }] } = await query(
@@ -161,9 +171,7 @@ export async function listMine(req, res) {
 // DELETE /items/:id: only the finder can delete, and not once someone has
 // claimed it (the claim history has to stay). Private questions go with it.
 export async function deleteItem(req, res) {
-  const { rows } = await query('SELECT finder_id FROM items WHERE id = $1', [req.params.id]);
-  if (!rows[0]) return res.status(404).json({ error: 'Item not found' });
-  if (rows[0].finder_id !== req.user.id) return res.status(403).json({ error: 'You can only delete your own posts' });
+  if (!(await ownItem(req, res, 'You can only delete your own posts'))) return;
   const { rowCount } = await query(
     `DELETE FROM items WHERE id = $1 AND NOT EXISTS (SELECT 1 FROM claims WHERE item_id = $1)`,
     [req.params.id]
@@ -179,18 +187,17 @@ const LOCKED = 'Someone has already claimed this item, so it can no longer be ed
 
 // GET /items/:id/edit: the finder's own post with its private answers, to fill the edit form.
 export async function getItemForEdit(req, res) {
+  if (!(await ownItem(req, res, NOT_YOURS))) return;
   const { rows: [item] } = await query(
-    `SELECT title, category, location, building, latitude, longitude, finder_id,
+    `SELECT title, category, location, building, latitude, longitude,
             EXISTS (SELECT 1 FROM claims WHERE item_id = items.id) AS claimed,
             (SELECT json_agg(json_build_object('question', question, 'answer', expected_answer) ORDER BY id)
              FROM item_questions WHERE item_id = items.id) AS questions
      FROM items WHERE id = $1`,
     [req.params.id]
   );
-  if (!item) return res.status(404).json({ error: 'Item not found' });
-  if (item.finder_id !== req.user.id) return res.status(403).json({ error: NOT_YOURS });
   if (item.claimed) return res.status(409).json({ error: LOCKED });
-  const { finder_id, claimed, ...post } = item; // eslint-disable-line no-unused-vars
+  const { claimed, ...post } = item; // eslint-disable-line no-unused-vars
   res.json({ ...post, questions: post.questions ?? [] });
 }
 
@@ -198,14 +205,9 @@ export async function getItemForEdit(req, res) {
 // Same rules as posting (checkItem). Photos stay as they are. The item and its
 // questions are replaced in ONE statement, and only if it's still unclaimed.
 export async function updateItem(req, res) {
-  const { rows: [owner] } = await query('SELECT finder_id FROM items WHERE id = $1', [req.params.id]);
-  if (!owner) return res.status(404).json({ error: 'Item not found' });
-  if (owner.finder_id !== req.user.id) return res.status(403).json({ error: NOT_YOURS });
-
+  if (!(await ownItem(req, res, NOT_YOURS))) return;
   const { item, errors } = checkItem(req.body ?? {});
-  if (Object.keys(errors).length) {
-    return res.status(400).json({ error: Object.values(errors).join(' '), fields: errors });
-  }
+  if (Object.keys(errors).length) return formErrors(res, errors);
   const { title, category, location, building, latitude, longitude, questions } = item;
   const { rows } = await query(
     `WITH item AS (

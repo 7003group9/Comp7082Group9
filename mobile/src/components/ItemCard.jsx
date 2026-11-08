@@ -1,5 +1,6 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { colors, spacing, type } from '../theme';
+import { colors, spacing, type, ui } from '../theme';
+import StatusLabel from './StatusLabel';
 
 // Turns an ISO date into the viewer's local date and time, e.g. "Oct 11, 2026, 3:28 PM".
 const postedAt = (iso) => new Date(iso).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' });
@@ -16,17 +17,8 @@ export function age(iso, now = Date.now()) {
   return [String(date.getDate()), date.toLocaleString([], { month: 'short' })];
 }
 
-// Status badge for anything not 'open'. Claimed items are green. The person whose
-// claim was approved sees "Approved", then "Ready to collect" once the finder has
-// dropped it off; the finder (mine, in My posts) sees "Dropped off"; others see "Claimed".
-export function StatusBadge({ item, mine = false }) {
-  const done = (text) => <Text style={[styles.pending, styles.done]}>{text}</Text>;
-  const approved = item.myClaim === 'approved';
-  if (item.status === 'claimed') return done(approved ? 'Approved' : 'Claimed');
-  if (item.status === 'dropped off') return done(mine ? 'Dropped off' : approved ? 'Ready to collect' : 'Claimed');
-  if (item.status === 'claim pending') return <Text style={styles.pending}>Claim pending</Text>;
-  return null;
-}
+// Where it was found: "SW1 · 2nd floor, by the vending machines" (building is optional).
+export const where = (item) => [item.building, item.location].filter(Boolean).join(' · ');
 
 // A found item styled like a claim ticket: details on the left,
 // a torn-off stub with how long ago it was posted on the right.
@@ -36,13 +28,14 @@ export default function ItemCard({ item, onPress }) {
     <Pressable
       onPress={onPress}
       accessibilityRole="button"
-      accessibilityLabel={`${item.title}, found at ${[item.building, item.location].filter(Boolean).join(' · ')}, ${postedAt(item.postedAt)}`}
+      accessibilityLabel={`${item.title}, found at ${where(item)}, ${postedAt(item.postedAt)}`}
       style={({ pressed }) => [styles.card, pressed && styles.pressed]}
     >
       <View style={styles.main}>
         <Text style={styles.title}>{item.title}</Text>
-        <Text style={type.meta}>{[item.building, item.location].filter(Boolean).join(' · ')}</Text>
-        <StatusBadge item={item} />
+        <Text style={type.meta}>{where(item)}</Text>
+        {/* Open items need no label on the feed, unless your claim on it was turned down. */}
+        {item.status !== 'open' || item.myClaim === 'rejected' ? <StatusLabel item={item} /> : null}
       </View>
       {/* Dashed divider between the details and the stub. */}
       <View style={styles.tear} />
@@ -55,33 +48,10 @@ export default function ItemCard({ item, onPress }) {
 }
 
 const styles = StyleSheet.create({
-  card: {
-    flexDirection: 'row',
-    backgroundColor: colors.paper,
-    borderRadius: 12,
-    marginBottom: spacing.md,
-    shadowColor: colors.ink,
-    shadowOpacity: 0.12,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 2,
-  },
+  card: { ...ui.card, flexDirection: 'row', marginBottom: spacing.md },
   pressed: { opacity: 0.85 },
   main: { flex: 1, padding: spacing.md, gap: 2 },
   title: { ...type.heading, marginBottom: 4 },
-  pending: {
-    alignSelf: 'flex-start',
-    marginTop: spacing.sm,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 4,
-    backgroundColor: colors.tag,
-    color: colors.ink,
-    fontSize: 13,
-    fontWeight: '600',
-    overflow: 'hidden',
-  },
-  done: { backgroundColor: colors.tagDone },
   tear: {
     width: 0,
     marginVertical: spacing.md,
