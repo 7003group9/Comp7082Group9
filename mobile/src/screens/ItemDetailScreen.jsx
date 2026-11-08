@@ -2,13 +2,14 @@ import { useContext, useEffect, useState } from 'react';
 import { ActivityIndicator, Linking, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { AuthContext } from '../context/AuthContext';
 import { fetchClaimForm, submitClaim } from '../api/client';
-import { colors, spacing, type } from '../theme';
+import { colors, pressedButton, smallButton, smallButtonText, spacing, type } from '../theme';
 
-// What a claimant sees once they've claimed (they only get one try per item).
+// What a claimant sees once they've claimed (they only get one try per item):
+// a highlighted headline in the status colour, then what to do next.
 const CLAIM_STATUS = {
-  pending: "Your claim was sent. Campus Security will check your answers. Check back here for the result.",
-  approved: 'Your claim was approved. Collect the item from Campus Security.',
-  rejected: "Your claim wasn't approved. If this really is yours, visit Campus Security with proof.",
+  pending: { headline: 'Your claim was sent.', next: 'Campus Security will check your answers. Check back here for the result.', color: colors.tagWait, text: colors.tagWaitText },
+  approved: { headline: 'Your claim was approved.', next: 'Collect the item from Campus Security.', color: colors.tagDone, text: colors.tagDoneText },
+  rejected: { headline: "Your claim wasn't approved.", next: 'If this really is yours, visit Campus Security with proof.', color: colors.tagNo, text: colors.tagNoText },
 };
 
 // One found item from the list, and the claim form: the finder's private
@@ -51,9 +52,17 @@ export default function ItemDetailScreen({ route }) {
   }
 
   let claimSection;
-  if (unavailable) claimSection = <Text style={type.body}>{unavailable}</Text>;
+  if (unavailable) claimSection = <Text style={[type.body, styles.section]}>{unavailable}</Text>;
   else if (!form) claimSection = <ActivityIndicator color={colors.teal} />;
-  else if (form.myClaim) claimSection = <Text style={styles.status}>{CLAIM_STATUS[form.myClaim]}</Text>;
+  else if (form.myClaim) {
+    const { headline, next, color, text } = CLAIM_STATUS[form.myClaim];
+    claimSection = (
+      <View style={styles.section}>
+        <Text style={[styles.headline, { backgroundColor: color, color: text }]}>{headline}</Text>
+        <Text style={type.heading}>{next}</Text>
+      </View>
+    );
+  }
   else {
     claimSection = (
       <>
@@ -88,14 +97,16 @@ export default function ItemDetailScreen({ route }) {
       {location ? <Text style={[type.body, { marginTop: spacing.md }]}>Found at: {[building, location].filter(Boolean).join(' · ')}</Text> : null}
       {latitude != null ? (
         <Pressable
+          style={({ pressed }) => [smallButton, styles.mapButton, pressed && pressedButton]}
           onPress={() => Linking.openURL(`https://www.google.com/maps?q=${latitude},${longitude}`)}
           accessibilityRole="link"
         >
-          <Text style={styles.link}>View on map</Text>
+          <Text style={smallButtonText}>View on map</Text>
         </Pressable>
       ) : null}
 
-      <Text style={[type.heading, styles.section]}>Is this yours?</Text>
+      {/* The heading only goes with the claim form; a claim status stands on its own. */}
+      {form && !form.myClaim ? <Text style={[type.heading, styles.section]}>Is this yours?</Text> : null}
       {claimSection}
     </ScrollView>
   );
@@ -104,8 +115,17 @@ export default function ItemDetailScreen({ route }) {
 const styles = StyleSheet.create({
   scroll: { flex: 1, backgroundColor: colors.mist },
   screen: { flexGrow: 1, backgroundColor: colors.mist, padding: spacing.md, paddingBottom: spacing.xl },
-  link: { color: colors.teal, fontWeight: '600', marginTop: spacing.sm },
+  mapButton: { marginTop: spacing.sm },
   section: { marginTop: spacing.xl, marginBottom: spacing.sm },
+  headline: {
+    ...type.heading,
+    alignSelf: 'flex-start',
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+    borderRadius: 4,
+    overflow: 'hidden',
+    marginBottom: spacing.sm,
+  },
   qa: { marginTop: spacing.md },
   label: { ...type.body, fontWeight: '600', marginBottom: spacing.xs },
   input: {
@@ -117,8 +137,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: colors.ink,
   },
-  status: { ...type.body, color: colors.teal },
-  error: { color: '#B00020', marginTop: spacing.md },
+  error: { color: colors.danger, marginTop: spacing.md },
   button: {
     backgroundColor: colors.teal,
     padding: spacing.md,
@@ -127,5 +146,5 @@ const styles = StyleSheet.create({
     marginTop: spacing.lg,
   },
   disabled: { opacity: 0.6 },
-  buttonText: { fontSize: 16, fontWeight: '700', color: colors.paper },
+  buttonText: { fontSize: 16, fontWeight: '700', color: colors.onAccent },
 });

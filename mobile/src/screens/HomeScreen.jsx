@@ -17,7 +17,7 @@ import CategoryChips from "../components/CategoryChips";
 import ItemCard from "../components/ItemCard";
 import PostButton from "../components/PostButton";
 import SearchBar from "../components/SearchBar";
-import { colors, spacing, type } from "../theme";
+import { colors, pressedButton, smallButton, smallButtonText, spacing, type } from "../theme";
 
 // Changes only after `value` has stopped changing for `ms`, so the server
 // isn't asked a question on every keystroke.
@@ -115,15 +115,15 @@ export default function HomeScreen({ navigation }) {
 
         <View style={styles.links}>
           {user.role === "security" ? (
-            <Pressable onPress={() => navigation.navigate("SecurityDashboard")}>
-              <Text style={styles.logout}>Review claims</Text>
+            <Pressable style={pressable} onPress={() => navigation.navigate("SecurityDashboard")} accessibilityRole="button">
+              <Text style={smallButtonText}>Review claims</Text>
             </Pressable>
           ) : null}
-          <Pressable onPress={() => navigation.navigate("MyListings")}>
-            <Text style={styles.logout}>My posts</Text>
+          <Pressable style={pressable} onPress={() => navigation.navigate("MyListings")} accessibilityRole="button">
+            <Text style={smallButtonText}>My posts</Text>
           </Pressable>
-          <Pressable onPress={logout}>
-            <Text style={styles.logout}>Logout</Text>
+          <Pressable style={pressable} onPress={logout} accessibilityRole="button">
+            <Text style={smallButtonText}>Logout</Text>
           </Pressable>
         </View>
       </View>
@@ -197,6 +197,9 @@ export default function HomeScreen({ navigation }) {
   );
 }
 
+// Small header buttons, darker while pressed.
+const pressable = ({ pressed }) => [smallButton, pressed && pressedButton];
+
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.mist },
   list: { paddingHorizontal: spacing.md, paddingBottom: 120 },
@@ -209,7 +212,7 @@ const styles = StyleSheet.create({
   title: { ...type.title, marginBottom: spacing.xs },
   center: { marginTop: spacing.xl, textAlign: "center", color: colors.slate },
   more: { marginVertical: spacing.md },
-  banner: { color: "#B00020", marginTop: spacing.md },
+  banner: { color: colors.danger, marginTop: spacing.md },
   topRow: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -217,10 +220,5 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
   },
 
-  links: { flexDirection: "row", gap: spacing.md },
-  logout: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: colors.teal,
-  },
+  links: { flexDirection: "row", gap: spacing.sm },
 });

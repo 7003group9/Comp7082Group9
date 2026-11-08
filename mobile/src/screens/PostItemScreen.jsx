@@ -524,10 +524,10 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: colors.ink,
   },
-  inputError: { borderColor: "#B00020" },
-  required: { color: "#B00020" }, // the red * on required fields
+  inputError: { borderColor: colors.danger },
+  required: { color: colors.danger }, // the red * on required fields
   requiredNote: { marginBottom: spacing.md },
-  fieldError: { color: "#B00020", marginTop: -spacing.sm, marginBottom: spacing.md },
+  fieldError: { color: colors.danger, marginTop: -spacing.sm, marginBottom: spacing.md },
   detail: { marginTop: spacing.md },
   locate: { marginTop: 0, marginBottom: spacing.md }, // room for the error under it, like the inputs
   pinRow: { flexDirection: "row", alignItems: "center", gap: spacing.md },
@@ -537,7 +537,7 @@ const styles = StyleSheet.create({
   value: { ...type.body, marginBottom: spacing.lg },
   qaReview: { marginTop: spacing.md },
   reviewPhotos: { marginTop: -spacing.md, marginBottom: spacing.lg },
-  warning: { color: "#8A5A00", marginTop: spacing.md },
+  warning: { color: colors.warning, marginTop: spacing.md },
   thumbs: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm, marginTop: spacing.md },
   thumb: { width: 88, height: 88, borderRadius: 8, backgroundColor: colors.line },
   remove: {
@@ -553,7 +553,7 @@ const styles = StyleSheet.create({
   },
   removeText: { color: colors.paper, fontSize: 16, fontWeight: "700", lineHeight: 18 },
   addButton: { marginTop: spacing.md, marginBottom: spacing.md },
-  error: { color: "#B00020", marginVertical: spacing.md },
+  error: { color: colors.danger, marginVertical: spacing.md },
   button: {
     backgroundColor: colors.teal,
     padding: spacing.md,
@@ -571,8 +571,8 @@ const styles = StyleSheet.create({
   },
   secondaryText: { fontSize: 16, fontWeight: "700", color: colors.teal },
   notice: { color: colors.teal, marginTop: spacing.md },
-  discard: { marginTop: spacing.md, color: "#B00020" },
+  discard: { marginTop: spacing.md, color: colors.danger },
   disabled: { opacity: 0.6 },
-  buttonText: { fontSize: 16, fontWeight: "700", color: colors.paper },
+  buttonText: { fontSize: 16, fontWeight: "700", color: colors.onAccent },
   link: { color: colors.teal, fontWeight: "600" },
 });

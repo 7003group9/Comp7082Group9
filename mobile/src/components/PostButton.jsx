@@ -25,11 +25,11 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     paddingVertical: 16,
     alignItems: 'center',
-    shadowColor: colors.ink,
+    shadowColor: colors.shadow,
     shadowOpacity: 0.25,
     shadowRadius: 12,
     shadowOffset: { width: 0, height: 6 },
     elevation: 6,
   },
-  label: { color: '#fff', fontSize: 17, fontWeight: '700' },
+  label: { color: colors.onAccent, fontSize: 17, fontWeight: '700' },
 });

@@ -5,7 +5,7 @@ import { AuthContext } from '../context/AuthContext';
 import { decideClaim, fetchClaimsToReview, markReceived } from '../api/client';
 import { colors, spacing, type } from '../theme';
 
-const RED = '#B00020';
+const RED = colors.danger;
 
 // Campus Security only: pending claims, each answer beside the finder's expected
 // one, so staff can compare them and decide. An approved claim stays here until
@@ -77,7 +77,7 @@ export default function SecurityDashboardScreen() {
         accessibilityRole="button"
         accessibilityLabel={`${label} claim by ${claim.claimantEmail}`}
       >
-        <Text style={[styles.actionText, { color: armed ? colors.paper : color }]}>
+        <Text style={[styles.actionText, { color: armed ? colors.onAccent : color }]}>
           {armed ? 'Tap again' : label}
         </Text>
       </Pressable>
@@ -131,7 +131,7 @@ const styles = StyleSheet.create({
   center: { marginTop: spacing.xl },
   empty: { textAlign: 'center', color: colors.slate, marginTop: spacing.xl },
   error: { color: RED, marginBottom: spacing.md },
-  card: { backgroundColor: colors.paper, borderRadius: 12, padding: spacing.md, marginBottom: spacing.md, gap: 2 },
+  card: { backgroundColor: colors.paper, borderRadius: 16, borderWidth: 1, borderColor: colors.line, padding: spacing.md, marginBottom: spacing.md, gap: 2 },
   gap: { marginTop: spacing.xs },
   qa: { marginTop: spacing.md, gap: 2 },
   question: { ...type.body, fontWeight: '600' },

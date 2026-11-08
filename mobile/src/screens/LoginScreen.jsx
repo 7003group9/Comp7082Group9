@@ -112,7 +112,7 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     justifyContent: "center",
   },
-  expired: { color: "#B00020", marginTop: spacing.sm },
+  expired: { color: colors.danger, marginTop: spacing.sm },
   hint: { ...type.meta, marginTop: spacing.sm, marginBottom: spacing.lg },
   label: { ...type.body, fontWeight: "600", marginBottom: spacing.xs },
   input: {
@@ -125,7 +125,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: colors.ink,
   },
-  error: { color: "#B00020", marginBottom: spacing.md },
+  error: { color: colors.danger, marginBottom: spacing.md },
   button: {
     backgroundColor: colors.teal,
     padding: spacing.md,
@@ -133,7 +133,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   disabled: { opacity: 0.6 },
-  buttonText: { fontSize: 16, fontWeight: "700", color: colors.paper },
+  buttonText: { fontSize: 16, fontWeight: "700", color: colors.onAccent },
   link: {
     color: colors.teal,
     textAlign: "center",

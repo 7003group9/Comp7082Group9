@@ -19,9 +19,11 @@ export function age(iso, now = Date.now()) {
 // Status badge for anything not 'open'. Claimed items are green. The person whose
 // claim was approved sees "Approved", then "Ready to collect" once the finder has
 // dropped it off; the finder (mine, in My posts) sees "Dropped off"; others see "Claimed".
+// Someone whose claim was turned down sees that in red, whatever the item's status.
 export function StatusBadge({ item, mine = false }) {
   const done = (text) => <Text style={[styles.pending, styles.done]}>{text}</Text>;
   const approved = item.myClaim === 'approved';
+  if (item.myClaim === 'rejected') return <Text style={[styles.pending, styles.no]}>Your claim wasn't approved</Text>;
   if (item.status === 'claimed') return done(approved ? 'Approved' : 'Claimed');
   if (item.status === 'dropped off') return done(mine ? 'Dropped off' : approved ? 'Ready to collect' : 'Claimed');
   if (item.status === 'claim pending') return <Text style={styles.pending}>Claim pending</Text>;
@@ -58,9 +60,11 @@ const styles = StyleSheet.create({
   card: {
     flexDirection: 'row',
     backgroundColor: colors.paper,
-    borderRadius: 12,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: colors.line,
     marginBottom: spacing.md,
-    shadowColor: colors.ink,
+    shadowColor: colors.shadow,
     shadowOpacity: 0.12,
     shadowRadius: 10,
     shadowOffset: { width: 0, height: 4 },
@@ -76,12 +80,13 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
     borderRadius: 4,
     backgroundColor: colors.tag,
-    color: colors.ink,
+    color: colors.tagText,
     fontSize: 13,
     fontWeight: '600',
     overflow: 'hidden',
   },
-  done: { backgroundColor: colors.tagDone },
+  done: { backgroundColor: colors.tagDone, color: colors.tagDoneText },
+  no: { backgroundColor: colors.tagNo, color: colors.tagNoText },
   tear: {
     width: 0,
     marginVertical: spacing.md,

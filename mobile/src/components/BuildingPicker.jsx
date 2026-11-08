@@ -76,10 +76,10 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: 999,
     borderWidth: 2,
-    borderColor: colors.ink,
+    borderColor: colors.chipBorder,
   },
-  chipActive: { backgroundColor: colors.ink },
+  chipActive: { backgroundColor: colors.teal, borderColor: colors.teal },
   label: { fontSize: 15, fontWeight: "600", color: colors.ink },
-  labelActive: { color: "#fff" },
+  labelActive: { color: colors.onAccent },
   link: { color: colors.teal, fontWeight: "600" },
 });
