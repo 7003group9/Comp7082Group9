@@ -9,6 +9,7 @@ export const colors = {
   tealDark: '#085757',
   tag: '#F4C542',
   tagDone: '#7FD69A', // green badge: claimed / approved
+  tagRejected: '#F2B8B5', // red badge: rejected claim
   line: '#C9D4DC',
   placeholder: '#A5B0BA', // hint text in empty inputs, lighter than typed text
 };

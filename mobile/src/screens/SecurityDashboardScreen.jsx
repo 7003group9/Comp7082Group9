@@ -4,6 +4,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { AuthContext } from '../context/AuthContext';
 import { decideClaim, fetchClaimsToReview, markReceived } from '../api/client';
 import { colors, spacing, type } from '../theme';
+import StatusLabel from '../components/StatusLabel';
 
 const RED = '#B00020';
 
@@ -99,6 +100,7 @@ export default function SecurityDashboardScreen() {
             No. {claim.itemId} · {claim.location}
           </Text>
           <Text style={[type.meta, styles.gap]}>Claimed by {claim.claimantEmail}</Text>
+          <StatusLabel claim={claim.status} />
 
           {claim.answers.map((a, i) => (
             <View key={a.questionId} style={styles.qa}>

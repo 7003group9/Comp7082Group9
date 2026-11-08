@@ -3,6 +3,7 @@ import { ActivityIndicator, Linking, Pressable, ScrollView, StyleSheet, Text, Te
 import { AuthContext } from '../context/AuthContext';
 import { fetchClaimForm, submitClaim } from '../api/client';
 import { colors, spacing, type } from '../theme';
+import StatusLabel from '../components/StatusLabel';
 
 // What a claimant sees once they've claimed (they only get one try per item).
 const CLAIM_STATUS = {
@@ -53,7 +54,14 @@ export default function ItemDetailScreen({ route }) {
   let claimSection;
   if (unavailable) claimSection = <Text style={type.body}>{unavailable}</Text>;
   else if (!form) claimSection = <ActivityIndicator color={colors.teal} />;
-  else if (form.myClaim) claimSection = <Text style={styles.status}>{CLAIM_STATUS[form.myClaim]}</Text>;
+  else if (form.myClaim) {
+    claimSection = (
+      <>
+        <StatusLabel claim={form.myClaim} />
+        <Text style={styles.status}>{CLAIM_STATUS[form.myClaim]}</Text>
+      </>
+    );
+  }
   else {
     claimSection = (
       <>
@@ -117,7 +125,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: colors.ink,
   },
-  status: { ...type.body, color: colors.teal },
+  status: { ...type.body, color: colors.teal, marginTop: spacing.sm },
   error: { color: '#B00020', marginTop: spacing.md },
   button: {
     backgroundColor: colors.teal,
