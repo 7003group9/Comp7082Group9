@@ -9,7 +9,11 @@ import { where } from '../components/ItemCard';
 // a highlighted headline in the status colour, then what to do next.
 const CLAIM_STATUS = {
   pending: { headline: 'Your claim was sent.', next: 'Campus Security will check your answers. Check back here for the result.', color: colors.tagWait, text: colors.tagWaitText },
-  approved: { headline: 'Your claim was approved.', next: 'Collect the item from Campus Security.', color: colors.tagDone, text: colors.tagDoneText },
+  approved: { headline: 'Your claim was approved.', next: "The finder is dropping it off at Campus Security. Check back here to see when it's ready to pick up.", color: colors.tagDone, text: colors.tagDoneText },
+  // Approved, and Campus Security has marked the item received.
+  ready: { headline: 'Your item is ready to pick up.', next: 'Collect it from the Campus Security desk.', color: colors.tagDone, text: colors.tagDoneText },
+  // Approved, and Campus Security recorded that you picked it up.
+  collected: { headline: 'You picked this up.', next: 'Glad you got it back!', color: colors.tagDone, text: colors.tagDoneText },
   rejected: { headline: "Your claim wasn't approved.", next: 'If this really is yours, visit Campus Security with proof.', color: colors.tagNo, text: colors.tagNoText },
 };
 
@@ -53,16 +57,26 @@ export default function ItemDetailScreen({ route }) {
   }
 
   let claimSection;
-  if (unavailable) claimSection = <Text style={[type.body, styles.section]}>{unavailable}</Text>;
+  // A highlighted headline in the status colour, then what it means.
+  const statusBlock = ({ headline, next, color, text }) => (
+    <View style={styles.section}>
+      <Text style={[styles.headline, { backgroundColor: color, color: text }]}>{headline}</Text>
+      <Text style={type.heading}>{next}</Text>
+    </View>
+  );
+
+  if (unavailable) {
+    // Someone else's claim was approved: shown like a claim status, in green.
+    const closed = ['claimed', 'dropped off', 'handed off'].includes(route.params.status);
+    claimSection = closed
+      ? statusBlock({ headline: 'Claimed', next: unavailable, color: colors.tagDone, text: colors.tagDoneText })
+      : <Text style={[type.body, styles.section]}>{unavailable}</Text>;
+  }
   else if (!form) claimSection = <ActivityIndicator color={colors.teal} />;
   else if (form.myClaim) {
-    const { headline, next, color, text } = CLAIM_STATUS[form.myClaim];
-    claimSection = (
-      <View style={styles.section}>
-        <Text style={[styles.headline, { backgroundColor: color, color: text }]}>{headline}</Text>
-        <Text style={type.heading}>{next}</Text>
-      </View>
-    );
+    const stage = form.myClaim !== 'approved' ? form.myClaim
+      : { 'dropped off': 'ready', 'handed off': 'collected' }[form.itemStatus] ?? 'approved';
+    claimSection = statusBlock(CLAIM_STATUS[stage]);
   }
   else {
     claimSection = (
@@ -94,7 +108,6 @@ export default function ItemDetailScreen({ route }) {
   return (
     <ScrollView style={styles.scroll} contentContainerStyle={styles.screen} keyboardShouldPersistTaps="handled">
       <Text style={type.heading}>{title}</Text>
-      <Text style={[type.meta, { marginTop: spacing.sm }]}>Item No. {id}</Text>
       {location ? <Text style={[type.body, { marginTop: spacing.md }]}>Found at: {where({ building, location })}</Text> : null}
       {latitude != null ? (
         <Pressable

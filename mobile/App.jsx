@@ -10,6 +10,7 @@ import ItemDetailScreen from "./src/screens/ItemDetailScreen";
 import PostItemScreen from "./src/screens/PostItemScreen";
 import MyListingsScreen from "./src/screens/MyListingsScreen";
 import SecurityDashboardScreen from "./src/screens/SecurityDashboardScreen";
+import HistoryScreen from "./src/screens/HistoryScreen";
 import { colors } from "./src/theme";
 import { AuthProvider, AuthContext } from "./src/context/AuthContext";
 import { useContext } from "react";
@@ -55,7 +56,7 @@ function AppNavigator() {
             <Stack.Screen
               name="ItemDetail"
               component={ItemDetailScreen}
-              options={{ title: "Found item" }}
+              options={{ title: "Found item", headerTitle: "" }} // just the back arrow; title stays for the browser tab
             />
 
             <Stack.Screen
@@ -72,11 +73,14 @@ function AppNavigator() {
 
             {/* Campus Security only; the server also refuses everyone else. */}
             {user.role === "security" ? (
-              <Stack.Screen
-                name="SecurityDashboard"
-                component={SecurityDashboardScreen}
-                options={{ title: "Review claims" }}
-              />
+              <>
+                <Stack.Screen
+                  name="SecurityDashboard"
+                  component={SecurityDashboardScreen}
+                  options={{ title: "Review claims" }}
+                />
+                <Stack.Screen name="History" component={HistoryScreen} options={{ title: "Past posts" }} />
+              </>
             ) : null}
           </>
         ) : (

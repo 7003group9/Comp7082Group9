@@ -243,3 +243,39 @@ export async function markReceived(req, res) {
   }
   res.json(rows[0]);
 }
+
+// POST /items/:id/handed-off (security only): the owner collected the item at the desk.
+// Records who handed it over and when (handoffs), and marks the item 'handed off', in ONE
+// statement. Only for an item that was received ('dropped off'), and only once.
+export async function markHandedOff(req, res) {
+  const { rows } = await query(
+    `WITH item AS (
+       UPDATE items SET status = 'handed off' WHERE id = $1 AND status = 'dropped off' RETURNING id
+     )
+     INSERT INTO handoffs (claim_id, staff_id)
+     SELECT c.id, $2 FROM claims c JOIN item ON c.item_id = item.id WHERE c.status = 'approved'
+     RETURNING completed_at AS "pickedUpAt"`,
+    [req.params.id, req.user.id]
+  );
+  if (!rows[0]) return res.status(409).json({ error: "This item isn't waiting at the desk, or was already picked up." });
+  res.json(rows[0]);
+}
+
+// GET /items/history (security only): every post, newest first, with who found it and,
+// once collected, who picked it up, when, and which staff member handed it over.
+// ponytail: no paging; add `before` paging like the feed if this list gets long.
+export async function listHistory(req, res) {
+  const { rows } = await query(
+    `SELECT i.id, i.title, i.location, i.building, i.status, i.created_at AS "postedAt",
+            f.school_email AS "finderEmail",
+            o.school_email AS "pickedUpBy", h.completed_at AS "pickedUpAt", s.school_email AS "handedOverBy"
+     FROM items i
+     JOIN users f ON f.id = i.finder_id
+     LEFT JOIN claims c ON c.item_id = i.id AND c.status = 'approved'
+     LEFT JOIN users o ON o.id = c.claimant_id
+     LEFT JOIN handoffs h ON h.claim_id = c.id
+     LEFT JOIN users s ON s.id = h.staff_id
+     ORDER BY i.id DESC`
+  );
+  res.json(rows);
+}
