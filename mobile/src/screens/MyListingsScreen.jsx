@@ -3,7 +3,8 @@ import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from "
 import { useFocusEffect } from "@react-navigation/native";
 import { AuthContext } from "../context/AuthContext";
 import { deleteItem, fetchMyItems } from "../api/client";
-import { StatusBadge, age } from "../components/ItemCard";
+import { age } from "../components/ItemCard";
+import StatusLabel from "../components/StatusLabel";
 import { colors, spacing, type } from "../theme";
 
 // The items I posted, each with a delete button. Claims on them are reviewed by
@@ -68,7 +69,7 @@ export default function MyListingsScreen({ navigation }) {
             <Text style={type.heading}>{item.title}</Text>
             <Text style={type.meta}>{[item.building, item.location].filter(Boolean).join(" · ")}</Text>
             <Text style={type.meta}>Posted {age(item.postedAt).join(" ").trim().replace(/^Now$/, "just now")}</Text>
-            <StatusBadge item={item} mine />
+            <StatusLabel item={item} mine />
             {item.status === "claimed" ? (
               <Text style={styles.dropOff}>
                 The owner has been confirmed. Please drop this item off at the Campus Security desk as soon as possible.
