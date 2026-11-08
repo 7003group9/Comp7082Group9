@@ -1,4 +1,4 @@
-// App root: sets up navigation and the three screens that exist so far.
+// App root: sets up navigation and the app's screens.
 
 import { DarkTheme, NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";

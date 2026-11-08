@@ -7,13 +7,26 @@ import { errorHandler } from '../src/middleware/errorHandler.js';
 import { signToken, verifyToken } from '../src/services/token.js';
 import { BUILDINGS, CATEGORIES, MAX_QUESTIONS, checkItem } from '../src/services/itemValidation.js';
 
-test('GET /health', async () => {
+// Starts the app on a free port, runs fn(baseUrl), and always stops it again.
+async function withServer(fn) {
   const server = app.listen(0);
-  const { port } = server.address();
-  const res = await fetch(`http://localhost:${port}/health`);
-  assert.deepEqual(await res.json(), { ok: true });
-  server.close();
+  try {
+    await fn(`http://localhost:${server.address().port}`);
+  } finally {
+    server.close();
+  }
+}
+// Headers for a logged-in user with this role (JSON body).
+const as = (role = 'student') => ({
+  Authorization: `Bearer ${signToken({ id: 1, role })}`,
+  'Content-Type': 'application/json',
 });
+const status = async (url, options) => (await fetch(url, options)).status;
+
+test('GET /health', () =>
+  withServer(async (base) => {
+    assert.deepEqual(await (await fetch(`${base}/health`)).json(), { ok: true });
+  }));
 
 test('login code works once, then is used up', () => {
   const { code, challenge } = issueCode('a@my.bcit.ca');
@@ -63,6 +76,8 @@ const goodPost = {
 };
 // First bytes of a PNG file, enough to pass the "is it really an image" check.
 const PNG = Buffer.from('89504e470d0a1a0a0000000d49484452', 'hex');
+// Which fields checkItem complains about for goodPost with these changes.
+const errorsFor = (changes) => Object.keys(checkItem({ ...goodPost, ...changes }).errors);
 
 test('checkItem accepts a complete post and cleans it up', () => {
   const { item, errors } = checkItem({
@@ -76,7 +91,6 @@ test('checkItem accepts a complete post and cleans it up', () => {
 });
 
 test('checkItem names each missing or wrong field', () => {
-  const errorsFor = (changes) => Object.keys(checkItem({ ...goodPost, ...changes }).errors);
   assert.deepEqual(errorsFor({ title: '   ' }), ['title']);
   assert.deepEqual(errorsFor({ location: '' }), ['location']);
   assert.deepEqual(errorsFor({ category: 'Pets' }), ['category']);
@@ -90,7 +104,6 @@ test('checkItem requires a valid GPS pin', () => {
   const { item, errors } = checkItem({ ...goodPost, ...pin });
   assert.deepEqual(errors, {});
   assert.deepEqual([item.latitude, item.longitude], [49.2504, -123.0016]);
-  const errorsFor = (changes) => Object.keys(checkItem({ ...goodPost, ...changes }).errors);
   assert.deepEqual(errorsFor({ latitude: undefined, longitude: undefined }), ['pin']); // no pin
   assert.deepEqual(errorsFor({ longitude: '' }), ['pin']); // half a pin
   assert.deepEqual(errorsFor({ latitude: '91' }), ['pin']);
@@ -100,13 +113,12 @@ test('checkItem requires a valid GPS pin', () => {
 test('the building is optional but must come from the list', () => {
   assert.equal(checkItem(goodPost).item.building, null);
   assert.equal(checkItem({ ...goodPost, building: 'SW1' }).item.building, 'SW1');
-  assert.deepEqual(Object.keys(checkItem({ ...goodPost, building: 'Hogwarts' }).errors), ['building']);
+  assert.deepEqual(errorsFor({ building: 'Hogwarts' }), ['building']);
 });
 
 test('checkItem reads questions sent as JSON text (multipart posts)', () => {
-  const { errors } = checkItem({ ...goodPost, questions: JSON.stringify(goodPost.questions) });
-  assert.deepEqual(errors, {});
-  assert.deepEqual(Object.keys(checkItem({ ...goodPost, questions: 'not json' }).errors), ['questions']);
+  assert.deepEqual(errorsFor({ questions: JSON.stringify(goodPost.questions) }), []);
+  assert.deepEqual(errorsFor({ questions: 'not json' }), ['questions']);
 });
 
 test('checkItem only accepts real image files', () => {
@@ -115,161 +127,92 @@ test('checkItem only accepts real image files', () => {
   assert.deepEqual(Object.keys(checkItem(goodPost, [fake]).errors), ['photos']);
 });
 
-test('posting an item needs login and a complete form', async () => {
-  const server = app.listen(0);
-  const url = `http://localhost:${server.address().port}/items`;
-  const token = signToken({ id: 1, role: 'student' });
-  const post = (body, auth = token) =>
-    fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', ...(auth && { Authorization: `Bearer ${auth}` }) },
-      body: JSON.stringify(body),
-    });
-  // Each rejected post says which field was wrong, so the app can show it there.
-  const rejected = async (changes, field) => {
-    const res = await post({ ...goodPost, ...changes });
-    assert.equal(res.status, 400);
-    assert.ok((await res.json()).fields[field], `expected an error for ${field}`);
-  };
-  try {
-    assert.equal((await post(goodPost, null)).status, 401);
-    await rejected({ title: '' }, 'title');
-    await rejected({ location: '' }, 'location');
-    await rejected({ category: 'Pets' }, 'category');
-    await rejected({ questions: [{ question: 'What sticker?', answer: '' }] }, 'questions');
-  } finally {
-    server.close();
-  }
-});
-
-test('posting rejects photos that are not images', async () => {
-  const server = app.listen(0);
-  const url = `http://localhost:${server.address().port}/items`;
-  const send = (file) => {
-    const form = new FormData();
-    for (const [k, v] of Object.entries(goodPost)) form.append(k, k === 'questions' ? JSON.stringify(v) : v);
-    form.append('photos', file, 'photo');
-    return fetch(url, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${signToken({ id: 1, role: 'student' })}` },
-      body: form,
-    });
-  };
-  try {
-    // Not an image type at all.
-    const text = await send(new Blob(['hello'], { type: 'text/plain' }));
-    assert.equal(text.status, 400);
-    assert.ok((await text.json()).fields.photos);
-    // Says it's a PNG, but the contents aren't.
-    const fake = await send(new Blob(['hello'], { type: 'image/png' }));
-    assert.equal(fake.status, 400);
-    assert.ok((await fake.json()).fields.photos);
-  } finally {
-    server.close();
-  }
-});
-
-test('drafts need login', async () => {
-  const server = app.listen(0);
-  const url = `http://localhost:${server.address().port}/items/draft`;
-  try {
-    for (const method of ['GET', 'PUT', 'DELETE']) {
-      assert.equal((await fetch(url, { method })).status, 401);
-    }
-  } finally {
-    server.close();
-  }
-});
-
-test('my posts and delete need login', async () => {
-  const server = app.listen(0);
-  const url = `http://localhost:${server.address().port}/items`;
-  assert.equal((await fetch(`${url}/mine`)).status, 401);
-  assert.equal((await fetch(`${url}/1`, { method: 'DELETE' })).status, 401);
-  server.close();
-});
-
-test('claiming needs login and a real item id', async () => {
-  const server = app.listen(0);
-  const base = `http://localhost:${server.address().port}`;
-  const auth = { Authorization: `Bearer ${signToken({ id: 1, role: 'student' })}` };
-  const claim = (body, headers = {}) =>
-    fetch(`${base}/claims`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', ...headers },
-      body: JSON.stringify(body),
-    });
-  try {
-    assert.equal((await claim({ itemId: 1, answers: [] })).status, 401);
-    assert.equal((await fetch(`${base}/items/1/questions`)).status, 401);
-    assert.equal((await claim({ itemId: 'abc', answers: [] }, auth)).status, 400);
-    assert.equal((await fetch(`${base}/items/abc/questions`, { headers: auth })).status, 400);
-  } finally {
-    server.close();
-  }
-});
-
-test('editing a post needs login and a real item id', async () => {
-  const server = app.listen(0);
-  const base = `http://localhost:${server.address().port}`;
-  const auth = { Authorization: `Bearer ${signToken({ id: 1, role: 'student' })}` };
-  const put = (id, headers = {}) =>
-    fetch(`${base}/items/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json', ...headers }, body: '{}' });
-  try {
-    assert.equal((await put(1)).status, 401);
-    assert.equal((await fetch(`${base}/items/1/edit`)).status, 401);
-    assert.equal((await put('abc', auth)).status, 400);
-    assert.equal((await fetch(`${base}/items/abc/edit`, { headers: auth })).status, 400);
-  } finally {
-    server.close();
-  }
-});
-
-test('only Campus Security can review and decide claims', async () => {
-  const server = app.listen(0);
-  const base = `http://localhost:${server.address().port}`;
-  const as = (role) => ({ Authorization: `Bearer ${signToken({ id: 1, role })}`, 'Content-Type': 'application/json' });
-  const decide = (headers, body) =>
-    fetch(`${base}/claims/1/decision`, { method: 'POST', headers, body: JSON.stringify(body) });
-  try {
-    assert.equal((await fetch(`${base}/claims/review`)).status, 401);
-    assert.equal((await fetch(`${base}/claims/review`, { headers: as('student') })).status, 403);
-    assert.equal((await decide(as('student'), { decision: 'approved' })).status, 403);
-    assert.equal((await decide(as('security'), { decision: 'maybe' })).status, 400);
-    const received = (headers) => fetch(`${base}/items/1/received`, { method: 'POST', headers });
-    assert.equal((await received({})).status, 401);
-    assert.equal((await received(as('student'))).status, 403);
-  } finally {
-    server.close();
-  }
-});
-
 test('only MAX_QUESTIONS questions are kept', () => {
   const many = Array.from({ length: MAX_QUESTIONS + 2 }, (_, i) => ({ question: `q${i}`, answer: 'a' }));
   assert.equal(checkItem({ ...goodPost, questions: many }).item.questions.length, MAX_QUESTIONS);
 });
 
-test('form options are public and match what posts accept', async () => {
-  const server = app.listen(0);
-  try {
-    const res = await fetch(`http://localhost:${server.address().port}/items/options`);
-    assert.equal(res.status, 200);
-    assert.deepEqual(await res.json(), { categories: CATEGORIES, buildings: BUILDINGS, maxQuestions: MAX_QUESTIONS });
-  } finally {
-    server.close();
-  }
-});
+test('posting an item needs login and a complete form', () =>
+  withServer(async (base) => {
+    const post = (body, headers = as()) =>
+      fetch(`${base}/items`, { method: 'POST', headers, body: JSON.stringify(body) });
+    // Each rejected post says which field was wrong, so the app can show it there.
+    const rejected = async (changes, field) => {
+      const res = await post({ ...goodPost, ...changes });
+      assert.equal(res.status, 400);
+      assert.ok((await res.json()).fields[field], `expected an error for ${field}`);
+    };
+    assert.equal((await post(goodPost, { 'Content-Type': 'application/json' })).status, 401);
+    await rejected({ title: '' }, 'title');
+    await rejected({ location: '' }, 'location');
+    await rejected({ category: 'Pets' }, 'category');
+    await rejected({ questions: [{ question: 'What sticker?', answer: '' }] }, 'questions');
+  }));
 
-test('a non-numeric item id is a 400, not a database error', async () => {
-  const server = app.listen(0);
-  try {
-    const res = await fetch(`http://localhost:${server.address().port}/items/abc`);
+test('posting rejects photos that are not images', () =>
+  withServer(async (base) => {
+    const send = (file) => {
+      const form = new FormData();
+      for (const [k, v] of Object.entries(goodPost)) form.append(k, k === 'questions' ? JSON.stringify(v) : v);
+      form.append('photos', file, 'photo');
+      return fetch(`${base}/items`, { method: 'POST', headers: { Authorization: as().Authorization }, body: form });
+    };
+    for (const file of [
+      new Blob(['hello'], { type: 'text/plain' }), // not an image type at all
+      new Blob(['hello'], { type: 'image/png' }), // says it's a PNG, but the contents aren't
+    ]) {
+      const res = await send(file);
+      assert.equal(res.status, 400);
+      assert.ok((await res.json()).fields.photos);
+    }
+  }));
+
+test('drafts, my posts, editing and deleting need login', () =>
+  withServer(async (base) => {
+    for (const method of ['GET', 'PUT', 'DELETE']) assert.equal(await status(`${base}/items/draft`, { method }), 401);
+    assert.equal(await status(`${base}/items/mine`), 401);
+    assert.equal(await status(`${base}/items/1/edit`), 401);
+    assert.equal(await status(`${base}/items/1`, { method: 'PUT' }), 401);
+    assert.equal(await status(`${base}/items/1`, { method: 'DELETE' }), 401);
+  }));
+
+test('claiming needs login and a real item id', () =>
+  withServer(async (base) => {
+    const claim = (body, headers) => status(`${base}/claims`, { method: 'POST', headers, body: JSON.stringify(body) });
+    assert.equal(await claim({ itemId: 1, answers: [] }, { 'Content-Type': 'application/json' }), 401);
+    assert.equal(await status(`${base}/items/1/questions`), 401);
+    assert.equal(await claim({ itemId: 'abc', answers: [] }, as()), 400);
+  }));
+
+test('a non-numeric item id is a 400, not a database error', () =>
+  withServer(async (base) => {
+    const res = await fetch(`${base}/items/abc`);
     assert.equal(res.status, 400);
     assert.deepEqual(await res.json(), { error: 'Invalid item id' });
-  } finally {
-    server.close();
-  }
-});
+    assert.equal(await status(`${base}/items/abc/questions`, { headers: as() }), 400);
+    assert.equal(await status(`${base}/items/abc/edit`, { headers: as() }), 400);
+    assert.equal(await status(`${base}/items/abc`, { method: 'PUT', headers: as(), body: '{}' }), 400);
+  }));
+
+test('only Campus Security can review and decide claims', () =>
+  withServer(async (base) => {
+    const decide = (headers, body) =>
+      status(`${base}/claims/1/decision`, { method: 'POST', headers, body: JSON.stringify(body) });
+    const received = (headers) => status(`${base}/items/1/received`, { method: 'POST', headers });
+    assert.equal(await status(`${base}/claims/review`), 401);
+    assert.equal(await status(`${base}/claims/review`, { headers: as('student') }), 403);
+    assert.equal(await decide(as('student'), { decision: 'approved' }), 403);
+    assert.equal(await decide(as('security'), { decision: 'maybe' }), 400);
+    assert.equal(await received({}), 401);
+    assert.equal(await received(as('student')), 403);
+  }));
+
+test('form options are public and match what posts accept', () =>
+  withServer(async (base) => {
+    const res = await fetch(`${base}/items/options`);
+    assert.equal(res.status, 200);
+    assert.deepEqual(await res.json(), { categories: CATEGORIES, buildings: BUILDINGS, maxQuestions: MAX_QUESTIONS });
+  }));
 
 test('server errors never show internal details to the user', () => {
   const reply = (err) => {

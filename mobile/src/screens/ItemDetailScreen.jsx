@@ -2,7 +2,8 @@ import { useContext, useEffect, useState } from 'react';
 import { ActivityIndicator, Linking, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { AuthContext } from '../context/AuthContext';
 import { fetchClaimForm, submitClaim } from '../api/client';
-import { colors, pressedButton, smallButton, smallButtonText, spacing, type } from '../theme';
+import { colors, spacing, type, ui } from '../theme';
+import { where } from '../components/ItemCard';
 
 // What a claimant sees once they've claimed (they only get one try per item):
 // a highlighted headline in the status colour, then what to do next.
@@ -94,14 +95,14 @@ export default function ItemDetailScreen({ route }) {
     <ScrollView style={styles.scroll} contentContainerStyle={styles.screen} keyboardShouldPersistTaps="handled">
       <Text style={type.heading}>{title}</Text>
       <Text style={[type.meta, { marginTop: spacing.sm }]}>Item No. {id}</Text>
-      {location ? <Text style={[type.body, { marginTop: spacing.md }]}>Found at: {[building, location].filter(Boolean).join(' · ')}</Text> : null}
+      {location ? <Text style={[type.body, { marginTop: spacing.md }]}>Found at: {where({ building, location })}</Text> : null}
       {latitude != null ? (
         <Pressable
-          style={({ pressed }) => [smallButton, styles.mapButton, pressed && pressedButton]}
+          style={({ pressed }) => [ui.smallButton, styles.mapButton, pressed && ui.pressed]}
           onPress={() => Linking.openURL(`https://www.google.com/maps?q=${latitude},${longitude}`)}
           accessibilityRole="link"
         >
-          <Text style={smallButtonText}>View on map</Text>
+          <Text style={ui.smallButtonText}>View on map</Text>
         </Pressable>
       ) : null}
 
@@ -128,23 +129,9 @@ const styles = StyleSheet.create({
   },
   qa: { marginTop: spacing.md },
   label: { ...type.body, fontWeight: '600', marginBottom: spacing.xs },
-  input: {
-    backgroundColor: colors.paper,
-    borderWidth: 1,
-    borderColor: colors.slate,
-    borderRadius: 8,
-    padding: spacing.md,
-    fontSize: 16,
-    color: colors.ink,
-  },
+  input: ui.input,
   error: { color: colors.danger, marginTop: spacing.md },
-  button: {
-    backgroundColor: colors.teal,
-    padding: spacing.md,
-    borderRadius: 8,
-    alignItems: 'center',
-    marginTop: spacing.lg,
-  },
-  disabled: { opacity: 0.6 },
-  buttonText: { fontSize: 16, fontWeight: '700', color: colors.onAccent },
+  button: { ...ui.button, marginTop: spacing.lg },
+  disabled: ui.disabled,
+  buttonText: ui.buttonText,
 });

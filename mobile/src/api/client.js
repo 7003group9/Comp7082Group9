@@ -44,7 +44,7 @@ export function fetchItems({ q, category, before } = {}, token) {
   return send("GET", `/items?${params}`, undefined, token);
 }
 
-// What the post form and filters offer: { categories, maxQuestions }.
+// What the post form and filters offer: { categories, buildings, maxQuestions }.
 // The server is the one place these live.
 export const fetchOptions = () => send("GET", "/items/options");
 
@@ -56,7 +56,7 @@ export const requestCode = (email) => post("/auth/request-code", { email });
 export const verifyCode = (email, code, challenge) =>
   post("/auth/verify-code", { email, code, challenge });
 
-// Post a found item: { title, category, location, latitude?, longitude?, questions: [{ question, answer }] },
+// Post a found item: { title, category, location, building?, latitude, longitude, questions: [{ question, answer }] },
 // plus an optional photo (a File object in photos), which is sent as a multipart form.
 export function createItem({ photos = [], ...item }, token) {
   if (!photos.length) return post("/items", item, token);
@@ -70,7 +70,7 @@ export function createItem({ photos = [], ...item }, token) {
 }
 
 // The user's unfinished post, kept on the server (one per user), or null:
-// { title, location, latitude, longitude, category, questions }. Photos aren't saved in drafts.
+// { title, location, building, latitude, longitude, category, questions }. Photos aren't saved in drafts.
 export const fetchDraft = (token) => send("GET", "/items/draft", undefined, token);
 export const putDraft = (draft, token) => send("PUT", "/items/draft", draft, token);
 export const deleteDraft = (token) => send("DELETE", "/items/draft", undefined, token);

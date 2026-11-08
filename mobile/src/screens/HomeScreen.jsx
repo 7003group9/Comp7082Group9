@@ -17,7 +17,7 @@ import CategoryChips from "../components/CategoryChips";
 import ItemCard from "../components/ItemCard";
 import PostButton from "../components/PostButton";
 import SearchBar from "../components/SearchBar";
-import { colors, pressedButton, smallButton, smallButtonText, spacing, type } from "../theme";
+import { colors, spacing, type, ui } from "../theme";
 
 // Changes only after `value` has stopped changing for `ms`, so the server
 // isn't asked a question on every keystroke.
@@ -116,14 +116,14 @@ export default function HomeScreen({ navigation }) {
         <View style={styles.links}>
           {user.role === "security" ? (
             <Pressable style={pressable} onPress={() => navigation.navigate("SecurityDashboard")} accessibilityRole="button">
-              <Text style={smallButtonText}>Review claims</Text>
+              <Text style={ui.smallButtonText}>Review claims</Text>
             </Pressable>
           ) : null}
           <Pressable style={pressable} onPress={() => navigation.navigate("MyListings")} accessibilityRole="button">
-            <Text style={smallButtonText}>My posts</Text>
+            <Text style={ui.smallButtonText}>My posts</Text>
           </Pressable>
           <Pressable style={pressable} onPress={logout} accessibilityRole="button">
-            <Text style={smallButtonText}>Logout</Text>
+            <Text style={ui.smallButtonText}>Logout</Text>
           </Pressable>
         </View>
       </View>
@@ -198,7 +198,7 @@ export default function HomeScreen({ navigation }) {
 }
 
 // Small header buttons, darker while pressed.
-const pressable = ({ pressed }) => [smallButton, pressed && pressedButton];
+const pressable = ({ pressed }) => [ui.smallButton, pressed && ui.pressed];
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.mist },

@@ -33,14 +33,24 @@ export const type = {
   meta: { fontSize: 14, color: colors.slate },
 };
 
-// Small filled button, a compact version of "I found something": spread into a
-// Pressable style (add pressedButton while pressed) with smallButtonText on its label.
-export const smallButton = {
-  backgroundColor: colors.teal,
-  borderRadius: 8,
-  paddingVertical: 6,
-  paddingHorizontal: 12,
-  alignSelf: 'flex-start',
+// Styles used on several screens. Use them directly, e.g. style={[ui.button, busy && ui.disabled]},
+// or spread them to add spacing: { ...ui.input, marginBottom: spacing.md }.
+export const ui = {
+  input: {
+    backgroundColor: colors.paper,
+    borderWidth: 1,
+    borderColor: colors.slate,
+    borderRadius: 8,
+    padding: spacing.md,
+    fontSize: 16,
+    color: colors.ink,
+  },
+  button: { backgroundColor: colors.teal, padding: spacing.md, borderRadius: 8, alignItems: 'center' },
+  buttonText: { fontSize: 16, fontWeight: '700', color: colors.onAccent },
+  disabled: { opacity: 0.6 },
+  card: { backgroundColor: colors.paper, borderRadius: 16, borderWidth: 1, borderColor: colors.line },
+  // Small filled button, a compact version of "I found something"; add ui.pressed while pressed.
+  smallButton: { backgroundColor: colors.teal, borderRadius: 8, paddingVertical: 6, paddingHorizontal: 12, alignSelf: 'flex-start' },
+  smallButtonText: { color: colors.onAccent, fontSize: 14, fontWeight: '700' },
+  pressed: { backgroundColor: colors.tealDark },
 };
-export const pressedButton = { backgroundColor: colors.tealDark };
-export const smallButtonText = { color: colors.onAccent, fontSize: 14, fontWeight: '700' };

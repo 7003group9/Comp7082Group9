@@ -4,7 +4,7 @@ import { AuthContext } from "../context/AuthContext";
 import { createItem, deleteDraft, fetchDraft, fetchItemForEdit, fetchOptions, putDraft, updateItem } from "../api/client";
 import BuildingPicker from "../components/BuildingPicker";
 import CategoryChips from "../components/CategoryChips";
-import { colors, spacing, type } from "../theme";
+import { colors, spacing, type, ui } from "../theme";
 
 // Photo limits; the server checks the same ones.
 const MAX_PHOTOS = 1;
@@ -514,16 +514,7 @@ const styles = StyleSheet.create({
   center: { alignItems: "center", justifyContent: "center" },
   gap: { marginTop: spacing.lg, marginBottom: spacing.md },
   label: { ...type.body, fontWeight: "600", marginBottom: spacing.xs },
-  input: {
-    backgroundColor: colors.paper,
-    borderWidth: 1,
-    borderColor: colors.slate,
-    borderRadius: 8,
-    padding: spacing.md,
-    marginBottom: spacing.md,
-    fontSize: 16,
-    color: colors.ink,
-  },
+  input: { ...ui.input, marginBottom: spacing.md },
   inputError: { borderColor: colors.danger },
   required: { color: colors.danger }, // the red * on required fields
   requiredNote: { marginBottom: spacing.md },
@@ -554,13 +545,7 @@ const styles = StyleSheet.create({
   removeText: { color: colors.paper, fontSize: 16, fontWeight: "700", lineHeight: 18 },
   addButton: { marginTop: spacing.md, marginBottom: spacing.md },
   error: { color: colors.danger, marginVertical: spacing.md },
-  button: {
-    backgroundColor: colors.teal,
-    padding: spacing.md,
-    borderRadius: 8,
-    alignItems: "center",
-    marginTop: spacing.md,
-  },
+  button: { ...ui.button, marginTop: spacing.md },
   secondary: {
     borderWidth: 2,
     borderColor: colors.teal,
@@ -572,7 +557,7 @@ const styles = StyleSheet.create({
   secondaryText: { fontSize: 16, fontWeight: "700", color: colors.teal },
   notice: { color: colors.teal, marginTop: spacing.md },
   discard: { marginTop: spacing.md, color: colors.danger },
-  disabled: { opacity: 0.6 },
-  buttonText: { fontSize: 16, fontWeight: "700", color: colors.onAccent },
+  disabled: ui.disabled,
+  buttonText: ui.buttonText,
   link: { color: colors.teal, fontWeight: "600" },
 });

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
-import { colors, spacing, type } from "../theme";
+import { colors, spacing, type, ui } from "../theme";
 
 const MAX_SHOWN = 12;
 // Ignore case and spaces so "se12" and "SE 12" both find SE12.
@@ -60,15 +60,7 @@ export default function BuildingPicker({ buildings, selected, onSelect }) {
 }
 
 const styles = StyleSheet.create({
-  input: {
-    backgroundColor: colors.paper,
-    borderWidth: 1,
-    borderColor: colors.slate,
-    borderRadius: 8,
-    padding: spacing.md,
-    fontSize: 16,
-    color: colors.ink,
-  },
+  input: ui.input,
   wrap: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm, marginTop: spacing.md },
   chosen: { flexDirection: "row", alignItems: "center", gap: spacing.md, marginTop: spacing.sm },
   chip: {
