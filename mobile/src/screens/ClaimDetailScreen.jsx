@@ -3,9 +3,9 @@ import { Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-na
 import { AuthContext } from '../context/AuthContext';
 import { decideClaim, fetchItem } from '../api/client';
 import StatusLabel from '../components/StatusLabel';
+import { useConfirm } from '../hooks';
 import { colors, spacing, type } from '../theme';
 
-const RED = '#B00020';
 const postedAt = (iso) => new Date(iso).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' });
 
 // One claim opened from Review claims, with what the list doesn't show: the item's
@@ -13,7 +13,7 @@ const postedAt = (iso) => new Date(iso).toLocaleString([], { dateStyle: 'medium'
 export default function ClaimDetailScreen({ route }) {
   const { user } = useContext(AuthContext);
   const [claim, setClaim] = useState(route.params.claim);
-  const [confirm, setConfirm] = useState(null); // 'approved' | 'rejected' waiting for a second tap
+  const [confirm, setConfirm] = useConfirm(); // 'approved' | 'rejected' waiting for a second tap
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [item, setItem] = useState(null); // null while loading, false if it failed
@@ -21,12 +21,6 @@ export default function ClaimDetailScreen({ route }) {
   useEffect(() => {
     fetchItem(claim.itemId).then(setItem).catch(() => setItem(false));
   }, [claim.itemId]);
-
-  useEffect(() => {
-    if (!confirm) return;
-    const timer = setTimeout(() => setConfirm(null), 4000);
-    return () => clearTimeout(timer);
-  }, [confirm]);
 
   async function onDecide(decision) {
     if (confirm !== decision) return setConfirm(decision);
@@ -53,7 +47,7 @@ export default function ClaimDetailScreen({ route }) {
         accessibilityRole="button"
         accessibilityLabel={`${label} claim by ${claim.claimantEmail}`}
       >
-        <Text style={[styles.actionText, { color: armed ? colors.paper : color }]}>
+        <Text style={[styles.actionText, { color: armed ? colors.onAccent : color }]}>
           {armed ? 'Tap again' : label}
         </Text>
       </Pressable>
@@ -96,7 +90,6 @@ export default function ClaimDetailScreen({ route }) {
       </Text>
 
       <Text style={styles.section}>Answers</Text>
-
       {claim.answers.map((a, i) => (
         <View key={a.questionId} style={i > 0 && styles.qa}>
           <Text style={styles.question}>{`${i + 1}. ${a.question}`}</Text>
@@ -109,7 +102,7 @@ export default function ClaimDetailScreen({ route }) {
       {claim.status === 'pending' ? (
         <View style={styles.actions}>
           {button('approved', 'Approve', colors.teal)}
-          {button('rejected', 'Reject', RED)}
+          {button('rejected', 'Reject', colors.danger)}
         </View>
       ) : (
         <Text style={styles.saved}>Decision saved.</Text>
@@ -123,10 +116,10 @@ const styles = StyleSheet.create({
   screen: { padding: spacing.md, gap: 2 },
   section: { ...type.heading, fontSize: 16, marginTop: spacing.lg, marginBottom: spacing.xs },
   link: { color: colors.teal, fontWeight: '600', marginTop: spacing.xs },
-  warn: { color: RED, fontWeight: '600' },
+  warn: { color: colors.danger, fontWeight: '600' },
   qa: { marginTop: spacing.md, gap: 2 },
   question: { ...type.body, fontWeight: '600' },
-  error: { color: RED, marginTop: spacing.md },
+  error: { color: colors.danger, marginTop: spacing.md },
   saved: { ...type.body, fontWeight: '600', color: colors.teal, marginTop: spacing.lg },
   actions: { flexDirection: 'row', gap: spacing.md, marginTop: spacing.lg },
   action: { flex: 1, borderWidth: 2, borderRadius: 8, padding: spacing.sm, alignItems: 'center' },

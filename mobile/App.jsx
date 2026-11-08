@@ -1,6 +1,6 @@
-// App root: sets up navigation and the three screens that exist so far.
+// App root: sets up navigation and the app's screens.
 
-import { NavigationContainer } from "@react-navigation/native";
+import { DarkTheme, NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { View } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
@@ -25,11 +25,18 @@ const frame = {
 
 // Stack navigator: screens push on top of each other with a back button.
 const Stack = createNativeStackNavigator();
+// The app is dark; tell the browser, so scrollbars and form controls match.
+if (typeof document !== "undefined") document.documentElement.style.colorScheme = "dark";
+// React Navigation's own colours (header, screen background) to match the app's.
+const navTheme = {
+  ...DarkTheme,
+  colors: { ...DarkTheme.colors, background: colors.mist, card: colors.mist, text: colors.ink, primary: colors.teal, border: colors.line },
+};
 function AppNavigator() {
   const { user } = useContext(AuthContext);
 
   return (
-    <NavigationContainer>
+    <NavigationContainer theme={navTheme}>
       <Stack.Navigator
         screenOptions={{
           headerTintColor: colors.ink,
@@ -96,8 +103,10 @@ export default function App() {
   return (
     <AuthProvider>
       <SafeAreaProvider>
-        <View style={frame}>
-          <AppNavigator />
+        <View style={{ flex: 1, backgroundColor: colors.mist }}>
+          <View style={frame}>
+            <AppNavigator />
+          </View>
         </View>
       </SafeAreaProvider>
     </AuthProvider>

@@ -1,5 +1,5 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { colors, spacing, type } from '../theme';
+import { colors, spacing, type, ui } from '../theme';
 import StatusLabel from './StatusLabel';
 
 // Turns an ISO date into the viewer's local date and time, e.g. "Oct 11, 2026, 3:28 PM".
@@ -17,6 +17,9 @@ export function age(iso, now = Date.now()) {
   return [String(date.getDate()), date.toLocaleString([], { month: 'short' })];
 }
 
+// Where it was found: "SW1 · 2nd floor, by the vending machines" (building is optional).
+export const where = (item) => [item.building, item.location].filter(Boolean).join(' · ');
+
 // A found item styled like a claim ticket: details on the left,
 // a torn-off stub with how long ago it was posted on the right.
 export default function ItemCard({ item, onPress }) {
@@ -25,13 +28,14 @@ export default function ItemCard({ item, onPress }) {
     <Pressable
       onPress={onPress}
       accessibilityRole="button"
-      accessibilityLabel={`${item.title}, found at ${[item.building, item.location].filter(Boolean).join(' · ')}, ${postedAt(item.postedAt)}`}
+      accessibilityLabel={`${item.title}, found at ${where(item)}, ${postedAt(item.postedAt)}`}
       style={({ pressed }) => [styles.card, pressed && styles.pressed]}
     >
       <View style={styles.main}>
         <Text style={styles.title}>{item.title}</Text>
-        <Text style={type.meta}>{[item.building, item.location].filter(Boolean).join(' · ')}</Text>
-        {item.status !== 'open' && <StatusLabel item={item} />}
+        <Text style={type.meta}>{where(item)}</Text>
+        {/* Open items need no label on the feed, unless your claim on it was turned down. */}
+        {item.status !== 'open' || item.myClaim === 'rejected' ? <StatusLabel item={item} /> : null}
       </View>
       {/* Dashed divider between the details and the stub. */}
       <View style={styles.tear} />
@@ -44,17 +48,7 @@ export default function ItemCard({ item, onPress }) {
 }
 
 const styles = StyleSheet.create({
-  card: {
-    flexDirection: 'row',
-    backgroundColor: colors.paper,
-    borderRadius: 12,
-    marginBottom: spacing.md,
-    shadowColor: colors.ink,
-    shadowOpacity: 0.12,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 2,
-  },
+  card: { ...ui.card, flexDirection: 'row', marginBottom: spacing.md },
   pressed: { opacity: 0.85 },
   main: { flex: 1, padding: spacing.md, gap: 2 },
   title: { ...type.heading, marginBottom: 4 },

@@ -143,6 +143,3 @@ export async function decideClaim(req, res) {
     throw err;
   }
 }
-
-// TODO: GET /claims/mine, the user's claims and their status.
-export const myClaims = (req, res) => res.status(501).json({ error: 'Not implemented' });
