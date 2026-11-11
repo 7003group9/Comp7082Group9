@@ -1,14 +1,16 @@
 import { useCallback, useContext, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { AuthContext } from '../context/AuthContext';
-import { decideClaim, fetchClaimsToReview, markReceived } from '../api/client';
+import { decideClaim, fetchClaimsToReview, markHandedOff, markReceived } from '../api/client';
+import { where } from '../components/ItemCard';
 import StatusLabel from '../components/StatusLabel';
 import { useConfirm, useFocusList } from '../hooks';
 import { colors, spacing, type, ui } from '../theme';
 
 // Campus Security only: pending claims, each answer beside the finder's expected
 // one, so staff can compare them and decide. An approved claim stays here until
-// the finder hands the item in and staff press "Received at the security desk".
+// the owner picks the item up: staff press "Received at the security desk" when the
+// finder hands it in, then "Picked up by owner" when the owner collects it.
 // Every button needs a second tap, since each step is final.
 export default function SecurityDashboardScreen({ navigation }) {
   const { user } = useContext(AuthContext);
@@ -25,7 +27,10 @@ export default function SecurityDashboardScreen({ navigation }) {
     try {
       if (decision === 'received') {
         await markReceived(claim.itemId, user.token);
-        setClaims((list) => list.filter((c) => c.id !== claim.id)); // done with it
+        setClaims((list) => list.map((c) => (c.id === claim.id ? { ...c, itemStatus: 'dropped off' } : c)));
+      } else if (decision === 'handed') {
+        await markHandedOff(claim.itemId, user.token);
+        setClaims((list) => list.filter((c) => c.id !== claim.id)); // done with it; it's in Past posts now
       } else {
         await decideClaim(claim.id, decision, user.token);
         // Approving rejects the other claims on that item, so drop them; the approved
@@ -34,7 +39,7 @@ export default function SecurityDashboardScreen({ navigation }) {
           decision === 'approved'
             ? list
                 .filter((c) => c.itemId !== claim.itemId || c.id === claim.id)
-                .map((c) => (c.id === claim.id ? { ...c, status: 'approved' } : c))
+                .map((c) => (c.id === claim.id ? { ...c, status: 'approved', itemStatus: 'claimed' } : c))
             : list.filter((c) => c.id !== claim.id)
         );
       }
@@ -71,14 +76,23 @@ export default function SecurityDashboardScreen({ navigation }) {
       contentContainerStyle={styles.list}
       data={claims}
       keyExtractor={(c) => String(c.id)}
-      ListHeaderComponent={error ? <Text style={styles.error}>{error}</Text> : null}
+      ListHeaderComponent={
+        <>
+          <Pressable
+            style={({ pressed }) => [ui.smallButton, styles.history, pressed && ui.pressed]}
+            onPress={() => navigation.navigate('History')}
+            accessibilityRole="button"
+          >
+            <Text style={ui.smallButtonText}>Past posts</Text>
+          </Pressable>
+          {error ? <Text style={styles.error}>{error}</Text> : null}
+        </>
+      }
       ListEmptyComponent={error ? null : <Text style={[type.body, styles.empty]}>No claims waiting for review.</Text>}
       renderItem={({ item: claim }) => (
         <View style={styles.card}>
           <Text style={type.heading}>{claim.title}</Text>
-          <Text style={type.meta}>
-            No. {claim.itemId} · {claim.location}
-          </Text>
+          <Text style={type.meta}>{where(claim)}</Text>
           <Text style={[type.meta, styles.gap]}>Claimed by {claim.claimantEmail}</Text>
           <StatusLabel claim={claim.status} />
           <Pressable
@@ -99,8 +113,17 @@ export default function SecurityDashboardScreen({ navigation }) {
 
           {claim.status === 'approved' ? (
             <>
-              <Text style={styles.approved}>Approved. Waiting for the finder to drop it off.</Text>
-              <View style={styles.actions}>{button(claim, 'received', '✓ Received at the security desk', colors.teal)}</View>
+              {claim.itemStatus === 'dropped off' ? (
+                <>
+                  <Text style={styles.approved}>At the desk. Waiting for the owner to pick it up.</Text>
+                  <View style={styles.actions}>{button(claim, 'handed', '✓ Picked up by owner', colors.teal)}</View>
+                </>
+              ) : (
+                <>
+                  <Text style={styles.approved}>Approved. Waiting for the finder to drop it off.</Text>
+                  <View style={styles.actions}>{button(claim, 'received', '✓ Received at the security desk', colors.teal)}</View>
+                </>
+              )}
             </>
           ) : (
             <View style={styles.actions}>
@@ -124,6 +147,7 @@ const styles = StyleSheet.create({
   gap: { marginTop: spacing.xs },
   qa: { marginTop: spacing.md, gap: 2 },
   question: { ...type.body, fontWeight: '600' },
+  history: { marginBottom: spacing.md },
   approved: { ...type.body, fontWeight: '600', color: colors.teal, marginTop: spacing.md },
   details: { color: colors.teal, fontWeight: '600', marginTop: spacing.sm },
   actions: { flexDirection: 'row', gap: spacing.md, marginTop: spacing.md },

@@ -3,7 +3,7 @@ import { colors, spacing, type, ui } from '../theme';
 import StatusLabel from './StatusLabel';
 
 // Turns an ISO date into the viewer's local date and time, e.g. "Oct 11, 2026, 3:28 PM".
-const postedAt = (iso) => new Date(iso).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' });
+export const postedAt = (iso) => new Date(iso).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' });
 
 // How long ago it was posted, for the stub: [big text, small text under it].
 // "Now", "5m ago", "3h ago", "2d ago", then the date ("12 Oct") after a week.

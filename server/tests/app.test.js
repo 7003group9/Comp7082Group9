@@ -206,6 +206,9 @@ test('only Campus Security can review and decide claims', () =>
     assert.equal(await decide(as('security'), { decision: 'maybe' }), 400);
     assert.equal(await received({}), 401);
     assert.equal(await received(as('student')), 403);
+    assert.equal(await status(`${base}/items/1/handed-off`, { method: 'POST', headers: as('student') }), 403);
+    assert.equal(await status(`${base}/items/history`), 401);
+    assert.equal(await status(`${base}/items/history`, { headers: as('student') }), 403);
   }));
 
 test('form options are public and match what posts accept', () =>

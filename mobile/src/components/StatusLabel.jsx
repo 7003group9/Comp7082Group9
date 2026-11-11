@@ -24,9 +24,9 @@ function forItem(item, mine) {
     case 'claimed':
       return [approved ? 'Approved' : 'Claimed', 'claimed'];
     case 'dropped off':
-      return [mine ? 'Dropped off' : approved ? 'Ready to collect' : 'Claimed', 'claimed'];
+      return [mine ? 'Dropped off' : approved ? 'Ready to pick up' : 'Claimed', 'claimed'];
     case 'handed off':
-      return ['Handed off', 'claimed'];
+      return ['Picked up', 'claimed'];
     default:
       return null;
   }

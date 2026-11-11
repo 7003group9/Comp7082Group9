@@ -59,6 +59,9 @@ export default function MyListingsScreen({ navigation }) {
             {item.status === "dropped off" ? (
               <Text style={styles.dropOff}>Thanks! Campus Security has it now.</Text>
             ) : null}
+            {item.status === "handed off" ? (
+              <Text style={styles.dropOff}>The owner has picked it up. Thanks for handing it in!</Text>
+            ) : null}
           </View>
           {item.status === "open" ? (
             <Pressable

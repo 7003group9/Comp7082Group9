@@ -10,7 +10,7 @@ import { MAX_REJECTED_CLAIMS, isLockedOut } from '../services/claimLimits.js';
 // then 'dropped off' and 'handed off'). Undefined if there's no such item.
 async function findItem(id) {
   const { rows } = await query(
-    `SELECT finder_id AS "finderId", status IN ('claimed', 'dropped off', 'handed off') AS closed
+    `SELECT finder_id AS "finderId", status, status IN ('claimed', 'dropped off', 'handed off') AS closed
      FROM items WHERE id = $1`,
     [id]
   );
@@ -32,8 +32,9 @@ async function lockedOut(userId) {
 
 // GET /items/:id/questions: what the claim form asks. Question text ONLY; the
 // expected answers never leave the server. Reply: { questions: [{ id, question }],
-// myClaim }, where myClaim is this user's claim status if they already claimed it
-// ('pending', 'approved' or 'rejected'; questions is then empty), else null.
+// myClaim, itemStatus }, where myClaim is this user's claim status if they already claimed it
+// ('pending', 'approved' or 'rejected'; questions is then empty), else null. itemStatus
+// lets an approved claimant see when the item is 'dropped off' (ready to pick up).
 // Someone locked out (too many rejected claims) gets 403 { error, locked: true }.
 export async function claimForm(req, res) {
   const item = await findItem(req.params.id);
@@ -43,7 +44,7 @@ export async function claimForm(req, res) {
     'SELECT status FROM claims WHERE item_id = $1 AND claimant_id = $2',
     [req.params.id, req.user.id]
   );
-  if (mine) return res.json({ questions: [], myClaim: mine.status });
+  if (mine) return res.json({ questions: [], myClaim: mine.status, itemStatus: item.status });
   if (item.closed) return res.status(409).json({ error: CLOSED });
   if (await lockedOut(req.user.id)) return res.status(403).json({ error: LOCKED_OUT, locked: true });
   const { rows: questions } = await query(
@@ -100,10 +101,11 @@ export async function createClaim(req, res) {
 
 // GET /claims/review (security only): every pending claim, oldest first, with the
 // claimant's email and each answer next to the expected one. Staff compare them and decide.
-// Approved claims stay listed (status 'approved') until the item is received at the desk.
+// Approved claims stay listed (status 'approved') until the owner picks the item up;
+// itemStatus says whether it's still with the finder ('claimed') or at the desk ('dropped off').
 export async function claimsToReview(req, res) {
   const { rows } = await query(
-    `SELECT c.id, c.status, c.item_id AS "itemId", i.title, i.location, u.school_email AS "claimantEmail",
+    `SELECT c.id, c.status, c.item_id AS "itemId", i.status AS "itemStatus", i.title, i.location, i.building, u.school_email AS "claimantEmail",
             json_agg(json_build_object('questionId', q.id, 'question', q.question,
                      'expected', q.expected_answer, 'answer', a.answer) ORDER BY q.id) AS answers,
             (SELECT count(*)::int FROM claims r
@@ -113,7 +115,7 @@ export async function claimsToReview(req, res) {
      JOIN users u ON u.id = c.claimant_id
      JOIN claim_answers a ON a.claim_id = c.id
      JOIN item_questions q ON q.id = a.question_id
-     WHERE c.status = 'pending' OR (c.status = 'approved' AND i.status = 'claimed')
+     WHERE c.status = 'pending' OR (c.status = 'approved' AND i.status IN ('claimed', 'dropped off'))
      GROUP BY c.id, i.id, u.id
      ORDER BY c.id`
   );

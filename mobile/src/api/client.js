@@ -81,16 +81,17 @@ export const fetchMyItems = (token) => send("GET", "/items/mine", undefined, tok
 // One item's public details (no questions or answers).
 export const fetchItem = (id) => send("GET", `/items/${id}`);
 
-// The claim form for an item: { questions: [{ id, question }], myClaim }. myClaim is
-// 'pending', 'approved' or 'rejected' if you already claimed it (one try per item), else null.
+// The claim form for an item: { questions: [{ id, question }], myClaim, itemStatus }. myClaim is
+// 'pending', 'approved' or 'rejected' if you already claimed it (one try per item), else null;
+// itemStatus then says whether the item is at the security desk yet ('dropped off').
 export const fetchClaimForm = (itemId, token) => send("GET", `/items/${itemId}/questions`, undefined, token);
 
 // Claim an item: answers = [{ questionId, answer }]. Campus Security checks them later.
 export const submitClaim = (itemId, answers, token) => post("/claims", { itemId, answers }, token);
 
 // Campus Security only: pending claims with each answer beside the expected one, plus
-// approved claims whose item hasn't been received at the desk yet (status 'approved').
-// [{ id, status, itemId, title, location, claimantEmail, answers: [{ question, expected, answer }] }].
+// approved claims whose item hasn't been picked up yet (status 'approved'; itemStatus 'claimed' or 'dropped off').
+// [{ id, status, itemId, itemStatus, title, location, building, claimantEmail, answers: [{ question, expected, answer }] }].
 export const fetchClaimsToReview = (token) => send("GET", "/claims/review", undefined, token);
 
 // Campus Security only: decision is "approved" or "rejected".
@@ -104,6 +105,13 @@ export const updateItem = (id, item, token) => send("PUT", `/items/${id}`, item,
 
 // Campus Security only: the finder handed this claimed item in at the desk. Final.
 export const markReceived = (itemId, token) => post(`/items/${itemId}/received`, undefined, token);
+
+// Campus Security only: the owner picked the item up at the desk. Records who and when. Final.
+export const markHandedOff = (itemId, token) => post(`/items/${itemId}/handed-off`, undefined, token);
+
+// Campus Security only: every post, newest first, with finderEmail and, once collected,
+// pickedUpBy, pickedUpAt and handedOverBy.
+export const fetchHistory = (token) => send("GET", "/items/history", undefined, token);
 
 // Delete one of your own posts.
 export const deleteItem = (id, token) => send("DELETE", `/items/${id}`, undefined, token);
