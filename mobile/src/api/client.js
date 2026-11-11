@@ -78,6 +78,9 @@ export const deleteDraft = (token) => send("DELETE", "/items/draft", undefined, 
 // The logged-in user's own posts.
 export const fetchMyItems = (token) => send("GET", "/items/mine", undefined, token);
 
+// One item's public details (no questions or answers).
+export const fetchItem = (id) => send("GET", `/items/${id}`);
+
 // The claim form for an item: { questions: [{ id, question }], myClaim, itemStatus }. myClaim is
 // 'pending', 'approved' or 'rejected' if you already claimed it (one try per item), else null;
 // itemStatus then says whether the item is at the security desk yet ('dropped off').

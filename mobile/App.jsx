@@ -11,6 +11,7 @@ import PostItemScreen from "./src/screens/PostItemScreen";
 import MyListingsScreen from "./src/screens/MyListingsScreen";
 import SecurityDashboardScreen from "./src/screens/SecurityDashboardScreen";
 import HistoryScreen from "./src/screens/HistoryScreen";
+import ClaimDetailScreen from "./src/screens/ClaimDetailScreen";
 import { colors } from "./src/theme";
 import { AuthProvider, AuthContext } from "./src/context/AuthContext";
 import { useContext } from "react";
@@ -80,6 +81,11 @@ function AppNavigator() {
                   options={{ title: "Review claims" }}
                 />
                 <Stack.Screen name="History" component={HistoryScreen} options={{ title: "Past posts" }} />
+                <Stack.Screen
+                  name="ClaimDetail"
+                  component={ClaimDetailScreen}
+                  options={{ title: "Claim" }}
+                />
               </>
             ) : null}
           </>

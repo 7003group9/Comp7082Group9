@@ -6,6 +6,7 @@ import { issueCode, checkCode, forgetCode } from '../src/services/loginCodes.js'
 import { errorHandler } from '../src/middleware/errorHandler.js';
 import { signToken, verifyToken } from '../src/services/token.js';
 import { BUILDINGS, CATEGORIES, MAX_QUESTIONS, checkItem } from '../src/services/itemValidation.js';
+import { MAX_REJECTED_CLAIMS, isLockedOut } from '../src/services/claimLimits.js';
 
 // Starts the app on a free port, runs fn(baseUrl), and always stops it again.
 async function withServer(fn) {
@@ -233,4 +234,12 @@ test('server errors never show internal details to the user', () => {
   const mine = reply(Object.assign(new Error('Unexpected token } in JSON'), { status: 400 }));
   assert.equal(mine.code, 400);
   assert.equal(mine.body.error, 'Unexpected token } in JSON'); // client mistakes keep their message
+});
+
+test('a claimant is locked out after 3 rejected claims', () => {
+  assert.equal(MAX_REJECTED_CLAIMS, 3);
+  assert.equal(isLockedOut(0), false);
+  assert.equal(isLockedOut(2), false);
+  assert.equal(isLockedOut(3), true);
+  assert.equal(isLockedOut(4), true);
 });

@@ -1,5 +1,6 @@
 import { query } from '../config/db.js';
 import { clean } from '../services/itemValidation.js';
+import { MAX_REJECTED_CLAIMS, isLockedOut } from '../services/claimLimits.js';
 
 // Claims are checked by Campus Security, not here and not by the finder: a claim
 // is saved as 'pending' and the claimant is never told whether their answers
@@ -18,12 +19,23 @@ async function findItem(id) {
 
 const OWN_ITEM = "You posted this item, so you can't claim it.";
 const CLOSED = 'This item has already been claimed.';
+const LOCKED_OUT = `You've had ${MAX_REJECTED_CLAIMS} claims rejected, so you can't make more claims in the app. Visit Campus Security with proof that the item is yours.`;
+
+// True once this user has had MAX_REJECTED_CLAIMS claims rejected.
+async function lockedOut(userId) {
+  const { rows: [{ rejected }] } = await query(
+    "SELECT count(*)::int AS rejected FROM claims WHERE claimant_id = $1 AND status = 'rejected'",
+    [userId]
+  );
+  return isLockedOut(rejected);
+}
 
 // GET /items/:id/questions: what the claim form asks. Question text ONLY; the
 // expected answers never leave the server. Reply: { questions: [{ id, question }],
 // myClaim, itemStatus }, where myClaim is this user's claim status if they already claimed it
 // ('pending', 'approved' or 'rejected'; questions is then empty), else null. itemStatus
 // lets an approved claimant see when the item is 'dropped off' (ready to pick up).
+// Someone locked out (too many rejected claims) gets 403 { error, locked: true }.
 export async function claimForm(req, res) {
   const item = await findItem(req.params.id);
   if (!item) return res.status(404).json({ error: 'Item not found' });
@@ -34,6 +46,7 @@ export async function claimForm(req, res) {
   );
   if (mine) return res.json({ questions: [], myClaim: mine.status, itemStatus: item.status });
   if (item.closed) return res.status(409).json({ error: CLOSED });
+  if (await lockedOut(req.user.id)) return res.status(403).json({ error: LOCKED_OUT, locked: true });
   const { rows: questions } = await query(
     'SELECT id, question FROM item_questions WHERE item_id = $1 ORDER BY id',
     [req.params.id]
@@ -45,6 +58,7 @@ export async function claimForm(req, res) {
 // an answer (400 with fields.answers otherwise). The claim and its answers go in
 // with ONE statement, and the item shows as 'claim pending'. A second claim on the
 // same item by the same person is refused (409) by the claims_one_per_user index.
+// Someone locked out (too many rejected claims) gets 403 { error, locked: true }.
 export async function createClaim(req, res) {
   const itemId = String(req.body?.itemId ?? '');
   if (!/^\d{1,9}$/.test(itemId)) return res.status(400).json({ error: 'Invalid item id' });
@@ -54,6 +68,7 @@ export async function createClaim(req, res) {
   if (!item) return res.status(404).json({ error: 'Item not found' });
   if (item.finderId === req.user.id) return res.status(403).json({ error: OWN_ITEM });
   if (item.closed) return res.status(409).json({ error: CLOSED });
+  if (await lockedOut(req.user.id)) return res.status(403).json({ error: LOCKED_OUT, locked: true });
 
   const { rows: questions } = await query('SELECT id FROM item_questions WHERE item_id = $1', [itemId]);
   const answers = questions.map((q) => ({
@@ -92,7 +107,9 @@ export async function claimsToReview(req, res) {
   const { rows } = await query(
     `SELECT c.id, c.status, c.item_id AS "itemId", i.status AS "itemStatus", i.title, i.location, i.building, u.school_email AS "claimantEmail",
             json_agg(json_build_object('questionId', q.id, 'question', q.question,
-                     'expected', q.expected_answer, 'answer', a.answer) ORDER BY q.id) AS answers
+                     'expected', q.expected_answer, 'answer', a.answer) ORDER BY q.id) AS answers,
+            (SELECT count(*)::int FROM claims r
+             WHERE r.claimant_id = c.claimant_id AND r.status = 'rejected') AS "rejectedBefore"
      FROM claims c
      JOIN items i ON i.id = c.item_id
      JOIN users u ON u.id = c.claimant_id
