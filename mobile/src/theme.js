@@ -53,4 +53,8 @@ export const ui = {
   smallButton: { backgroundColor: colors.teal, borderRadius: 8, paddingVertical: 6, paddingHorizontal: 12, alignSelf: 'flex-start' },
   smallButtonText: { color: colors.onAccent, fontSize: 14, fontWeight: '700' },
   pressed: { backgroundColor: colors.tealDark },
+  // Outlined Approve / Reject style buttons (Campus Security); pass borderColor and text color.
+  actions: { flexDirection: 'row', gap: spacing.md, marginTop: spacing.md },
+  action: { flex: 1, borderWidth: 2, borderRadius: 8, padding: spacing.sm, alignItems: 'center' },
+  actionText: { fontSize: 16, fontWeight: '700' },
 };
