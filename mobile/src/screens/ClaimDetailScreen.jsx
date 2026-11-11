@@ -2,11 +2,11 @@ import { useContext, useEffect, useState } from 'react';
 import { Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { AuthContext } from '../context/AuthContext';
 import { decideClaim, fetchItem } from '../api/client';
+import { postedAt, where } from '../components/ItemCard';
 import StatusLabel from '../components/StatusLabel';
 import { useConfirm } from '../hooks';
-import { colors, spacing, type } from '../theme';
+import { colors, spacing, type, ui } from '../theme';
 
-const postedAt = (iso) => new Date(iso).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' });
 
 // One claim opened from Review claims, with what the list doesn't show: the item's
 // details and how many of this claimant's earlier claims were rejected.
@@ -41,13 +41,13 @@ export default function ClaimDetailScreen({ route }) {
     const armed = confirm === decision;
     return (
       <Pressable
-        style={[styles.action, { borderColor: color }, armed && { backgroundColor: color }]}
+        style={[ui.action, { borderColor: color }, armed && { backgroundColor: color }]}
         onPress={() => onDecide(decision)}
         disabled={busy}
         accessibilityRole="button"
         accessibilityLabel={`${label} claim by ${claim.claimantEmail}`}
       >
-        <Text style={[styles.actionText, { color: armed ? colors.onAccent : color }]}>
+        <Text style={[ui.actionText, { color: armed ? colors.onAccent : color }]}>
           {armed ? 'Tap again' : label}
         </Text>
       </Pressable>
@@ -57,9 +57,7 @@ export default function ClaimDetailScreen({ route }) {
   return (
     <ScrollView style={styles.scroll} contentContainerStyle={styles.screen}>
       <Text style={type.heading}>{claim.title}</Text>
-      <Text style={type.meta}>
-        No. {claim.itemId} · {claim.location}
-      </Text>
+      <Text style={type.meta}>{where(claim)}</Text>
       <StatusLabel claim={claim.status} />
 
       <Text style={styles.section}>Item</Text>
@@ -100,7 +98,7 @@ export default function ClaimDetailScreen({ route }) {
 
       {error ? <Text style={styles.error}>{error}</Text> : null}
       {claim.status === 'pending' ? (
-        <View style={styles.actions}>
+        <View style={[ui.actions, styles.actions]}>
           {button('approved', 'Approve', colors.teal)}
           {button('rejected', 'Reject', colors.danger)}
         </View>
@@ -121,7 +119,5 @@ const styles = StyleSheet.create({
   question: { ...type.body, fontWeight: '600' },
   error: { color: colors.danger, marginTop: spacing.md },
   saved: { ...type.body, fontWeight: '600', color: colors.teal, marginTop: spacing.lg },
-  actions: { flexDirection: 'row', gap: spacing.md, marginTop: spacing.lg },
-  action: { flex: 1, borderWidth: 2, borderRadius: 8, padding: spacing.sm, alignItems: 'center' },
-  actionText: { fontSize: 16, fontWeight: '700' },
+  actions: { marginTop: spacing.lg },
 });

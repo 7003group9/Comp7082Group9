@@ -57,13 +57,13 @@ export default function SecurityDashboardScreen({ navigation }) {
     const armed = confirm === `${claim.id}:${decision}`;
     return (
       <Pressable
-        style={[styles.action, { borderColor: color }, armed && { backgroundColor: color }]}
+        style={[ui.action, { borderColor: color }, armed && { backgroundColor: color }]}
         onPress={() => onDecide(claim, decision)}
         disabled={busyId === claim.id}
         accessibilityRole="button"
         accessibilityLabel={`${label} claim by ${claim.claimantEmail}`}
       >
-        <Text style={[styles.actionText, { color: armed ? colors.onAccent : color }]}>
+        <Text style={[ui.actionText, { color: armed ? colors.onAccent : color }]}>
           {armed ? 'Tap again' : label}
         </Text>
       </Pressable>
@@ -116,17 +116,17 @@ export default function SecurityDashboardScreen({ navigation }) {
               {claim.itemStatus === 'dropped off' ? (
                 <>
                   <Text style={styles.approved}>At the desk. Waiting for the owner to pick it up.</Text>
-                  <View style={styles.actions}>{button(claim, 'handed', '✓ Picked up by owner', colors.teal)}</View>
+                  <View style={ui.actions}>{button(claim, 'handed', '✓ Picked up by owner', colors.teal)}</View>
                 </>
               ) : (
                 <>
                   <Text style={styles.approved}>Approved. Waiting for the finder to drop it off.</Text>
-                  <View style={styles.actions}>{button(claim, 'received', '✓ Received at the security desk', colors.teal)}</View>
+                  <View style={ui.actions}>{button(claim, 'received', '✓ Received at the security desk', colors.teal)}</View>
                 </>
               )}
             </>
           ) : (
-            <View style={styles.actions}>
+            <View style={ui.actions}>
               {button(claim, 'approved', 'Approve', colors.teal)}
               {button(claim, 'rejected', 'Reject', colors.danger)}
             </View>
@@ -150,7 +150,4 @@ const styles = StyleSheet.create({
   history: { marginBottom: spacing.md },
   approved: { ...type.body, fontWeight: '600', color: colors.teal, marginTop: spacing.md },
   details: { color: colors.teal, fontWeight: '600', marginTop: spacing.sm },
-  actions: { flexDirection: 'row', gap: spacing.md, marginTop: spacing.md },
-  action: { flex: 1, borderWidth: 2, borderRadius: 8, padding: spacing.sm, alignItems: 'center' },
-  actionText: { fontSize: 16, fontWeight: '700' },
 });

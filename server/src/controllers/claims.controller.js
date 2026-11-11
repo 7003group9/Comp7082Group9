@@ -1,6 +1,5 @@
 import { query } from '../config/db.js';
 import { clean } from '../services/itemValidation.js';
-import { MAX_REJECTED_CLAIMS, isLockedOut } from '../services/claimLimits.js';
 
 // Claims are checked by Campus Security, not here and not by the finder: a claim
 // is saved as 'pending' and the claimant is never told whether their answers
@@ -19,6 +18,9 @@ async function findItem(id) {
 
 const OWN_ITEM = "You posted this item, so you can't claim it.";
 const CLOSED = 'This item has already been claimed.';
+// A rejected claim counts as a wrong attempt. After this many, the person can't make
+// new claims in the app and is sent to Campus Security instead.
+const MAX_REJECTED_CLAIMS = 3;
 const LOCKED_OUT = `You've had ${MAX_REJECTED_CLAIMS} claims rejected, so you can't make more claims in the app. Visit Campus Security with proof that the item is yours.`;
 
 // True once this user has had MAX_REJECTED_CLAIMS claims rejected.
@@ -27,7 +29,7 @@ async function lockedOut(userId) {
     "SELECT count(*)::int AS rejected FROM claims WHERE claimant_id = $1 AND status = 'rejected'",
     [userId]
   );
-  return isLockedOut(rejected);
+  return rejected >= MAX_REJECTED_CLAIMS;
 }
 
 // GET /items/:id/questions: what the claim form asks. Question text ONLY; the
