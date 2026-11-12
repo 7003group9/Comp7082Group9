@@ -35,13 +35,6 @@ CREATE TABLE IF NOT EXISTS item_images (
   data      BYTEA NOT NULL
 );
 
--- PRIVATE: one unfinished post per user. Kept out of items so drafts are never public.
-CREATE TABLE IF NOT EXISTS drafts (
-  user_id    INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
-  data       JSONB NOT NULL,  -- { title, location, building, latitude, longitude, category, questions }
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
 CREATE TABLE IF NOT EXISTS claims (
   id           SERIAL PRIMARY KEY,
   item_id      INTEGER NOT NULL REFERENCES items(id),

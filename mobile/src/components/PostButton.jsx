@@ -1,5 +1,5 @@
 import { Pressable, StyleSheet, Text } from 'react-native';
-import { colors } from '../theme';
+import { colors, ui } from '../theme';
 
 // Big floating button pinned to the bottom of the screen ("I found something").
 // Prop: onPress.
@@ -8,7 +8,7 @@ export default function PostButton({ onPress }) {
     <Pressable
       onPress={onPress}
       accessibilityRole="button"
-      style={({ pressed }) => [styles.btn, pressed && { backgroundColor: colors.tealDark }]}
+      style={({ pressed }) => [styles.btn, pressed && ui.pressed]}
     >
       <Text style={styles.label}>I found something</Text>
     </Pressable>

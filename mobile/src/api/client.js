@@ -69,12 +69,6 @@ export function createItem({ photos = [], ...item }, token) {
   return post("/items", form, token);
 }
 
-// The user's unfinished post, kept on the server (one per user), or null:
-// { title, location, building, latitude, longitude, category, questions }. Photos aren't saved in drafts.
-export const fetchDraft = (token) => send("GET", "/items/draft", undefined, token);
-export const putDraft = (draft, token) => send("PUT", "/items/draft", draft, token);
-export const deleteDraft = (token) => send("DELETE", "/items/draft", undefined, token);
-
 // The logged-in user's own posts.
 export const fetchMyItems = (token) => send("GET", "/items/mine", undefined, token);
 

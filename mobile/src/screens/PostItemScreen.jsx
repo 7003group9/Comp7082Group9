@@ -1,7 +1,7 @@
 import { useContext, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { AuthContext } from "../context/AuthContext";
-import { createItem, deleteDraft, fetchDraft, fetchItemForEdit, fetchOptions, putDraft, updateItem } from "../api/client";
+import { createItem, fetchItemForEdit, fetchOptions, updateItem } from "../api/client";
 import BuildingPicker from "../components/BuildingPicker";
 import CategoryChips from "../components/CategoryChips";
 import { colors, spacing, type, ui } from "../theme";
@@ -55,6 +55,14 @@ function pickFiles(onPick) {
   input.click();
 }
 
+// Field label; required adds the red *.
+const Label = ({ children, required, style }) => (
+  <Text style={[styles.label, style]}>
+    {children}
+    {required ? <Text style={styles.required} accessibilityLabel="required"> *</Text> : null}
+  </Text>
+);
+
 // Red message under a field; nothing when there is no error.
 const FieldError = ({ message }) => (message ? <Text style={styles.fieldError}>{message}</Text> : null);
 
@@ -85,11 +93,11 @@ function Thumbnails({ photos, onRemove }) {
 // Form for a finder to post a found item: public description, location,
 // category, photos, and private questions only the real owner could answer.
 // With route.params.editId it edits that post instead: the form is filled from
-// the server, there are no drafts or photos, and saving goes back to My posts.
+// the server, photos can't be changed, and saving goes back to My posts.
 export default function PostItemScreen({ navigation, route }) {
   const editId = route.params?.editId;
   const { user } = useContext(AuthContext);
-  const [loading, setLoading] = useState(true); // checking the server for a saved draft
+  const [loading, setLoading] = useState(!!editId); // editing: fetching the post
   const [title, setTitle] = useState("");
   const [location, setLocation] = useState(""); // the finder's description of the spot
   const [pin, setPin] = useState(null); // { latitude, longitude, accuracy? } from the device, or null
@@ -103,8 +111,6 @@ export default function PostItemScreen({ navigation, route }) {
   const [questions, setQuestions] = useState([EMPTY_QA]);
   // Picked photos as { file, uri }; uri is a preview straight from the device.
   const [photos, setPhotos] = useState([]);
-  const [hasDraft, setHasDraft] = useState(false);
-  const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
   const [fieldErrors, setFieldErrors] = useState({}); // { field: message }
   const [busy, setBusy] = useState(false);
@@ -120,25 +126,22 @@ export default function PostItemScreen({ navigation, route }) {
 
   const [loadError, setLoadError] = useState(""); // editing: why the post couldn't be opened
 
-  // Editing: load the post (answers included). Posting: restore the draft saved on
-  // the server, if any; if it can't be loaded, start with an empty form.
+  // Editing: fill the form from the post (answers included).
   useEffect(() => {
+    if (!editId) return;
     let active = true;
-    if (editId) navigation.setOptions({ title: "Edit post" });
-    (editId ? fetchItemForEdit(editId, user.token) : fetchDraft(user.token))
-      .then((draft) => {
-        if (!active || !draft) return;
-        setTitle(draft.title ?? "");
-        setLocation(draft.location ?? "");
-        setPin(draft.latitude != null ? { latitude: draft.latitude, longitude: draft.longitude } : null);
-        setBuilding(draft.building ?? "");
-        setCategory(draft.category ?? "Other");
-        setQuestions(draft.questions?.length ? draft.questions : [EMPTY_QA]);
-        if (editId) return;
-        setHasDraft(true);
-        setNotice("Your saved draft was restored.");
+    navigation.setOptions({ title: "Edit post" });
+    fetchItemForEdit(editId, user.token)
+      .then((post) => {
+        if (!active) return;
+        setTitle(post.title ?? "");
+        setLocation(post.location ?? "");
+        setPin(post.latitude != null ? { latitude: post.latitude, longitude: post.longitude } : null);
+        setBuilding(post.building ?? "");
+        setCategory(post.category ?? "Other");
+        setQuestions(post.questions?.length ? post.questions : [EMPTY_QA]);
       })
-      .catch((err) => editId && active && setLoadError(err.message)) // e.g. someone claimed it
+      .catch((err) => active && setLoadError(err.message)) // e.g. someone claimed it
       .finally(() => active && setLoading(false));
     return () => {
       active = false;
@@ -196,58 +199,9 @@ export default function PostItemScreen({ navigation, route }) {
     clearError("photos");
   }
 
-  // Keep what's typed so far on the server; it is restored next time this page opens.
-  async function saveDraft() {
-    setError("");
-    setNotice("");
-    setBusy(true);
-    try {
-      await putDraft(
-        { title, location, building, latitude: pin?.latitude, longitude: pin?.longitude, category, questions },
-        user.token
-      );
-      setHasDraft(true);
-      setNotice(
-        photos.length
-          ? "Draft saved. Photos aren't saved in drafts, so add them again when you come back."
-          : "Draft saved. It will be here next time you open this page."
-      );
-    } catch (err) {
-      setError(`Could not save the draft: ${err.message}`);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function discardDraft() {
-    setError("");
-    setNotice("");
-    setBusy(true);
-    try {
-      await deleteDraft(user.token);
-    } catch (err) {
-      setError(`Could not discard the draft: ${err.message}`);
-      return;
-    } finally {
-      setBusy(false);
-    }
-    photos.forEach((p) => URL.revokeObjectURL(p.uri));
-    setTitle("");
-    setLocation("");
-    setPin(null);
-    setBuilding("");
-    setCategory("Other");
-    setQuestions([EMPTY_QA]);
-    setPhotos([]);
-    setFieldErrors({});
-    setHasDraft(false);
-    setNotice("Draft discarded.");
-  }
-
   // Only shows the review step for a post the server will accept.
   function review() {
     setError("");
-    setNotice("");
     const errors = checkForm({ title, location, pin, questions });
     setFieldErrors(errors);
     if (Object.keys(errors).length) return setError("Fix the fields marked above first.");
@@ -270,7 +224,6 @@ export default function PostItemScreen({ navigation, route }) {
         return;
       }
       await createItem({ ...post, photos: photos.map((p) => p.file) }, user.token);
-      deleteDraft(user.token).catch(() => {}); // posted, so the draft is no longer needed
       navigation.navigate("Home"); // the list reloads when it comes back into view
     } catch (err) {
       // The server said which fields are wrong: back to the form to show them there.
@@ -365,7 +318,7 @@ export default function PostItemScreen({ navigation, route }) {
       <Text style={[type.meta, styles.requiredNote]}>
         <Text style={styles.required}>*</Text> Required
       </Text>
-      <Text style={styles.label}>What is it?<Text style={styles.required} accessibilityLabel="required"> *</Text></Text>
+      <Label required>What is it?</Label>
       <TextInput
         placeholderTextColor={PLACEHOLDER}
         style={[styles.input, fieldErrors.title && styles.inputError]}
@@ -378,7 +331,7 @@ export default function PostItemScreen({ navigation, route }) {
       />
       <FieldError message={fieldErrors.title} />
 
-      <Text style={styles.label}>Where did you find it?<Text style={styles.required} accessibilityLabel="required"> *</Text></Text>
+      <Label required>Where did you find it?</Label>
       {pin ? (
         <View style={styles.pinRow}>
           <Text style={[type.body, styles.pinText]}>✓ {pinLabel(pin)}</Text>
@@ -398,7 +351,7 @@ export default function PostItemScreen({ navigation, route }) {
       )}
       <FieldError message={fieldErrors.pin} />
 
-      <Text style={[styles.label, styles.detail]}>Building</Text>
+      <Label style={styles.detail}>Building</Label>
       {options.buildings.length ? (
         <BuildingPicker
           buildings={options.buildings}
@@ -413,7 +366,7 @@ export default function PostItemScreen({ navigation, route }) {
       )}
       <FieldError message={fieldErrors.building} />
 
-      <Text style={[styles.label, styles.detail]}>Describe the location<Text style={styles.required} accessibilityLabel="required"> *</Text></Text>
+      <Label required style={styles.detail}>Describe the location</Label>
       <TextInput
         placeholderTextColor={PLACEHOLDER}
         style={[styles.input, fieldErrors.location && styles.inputError]}
@@ -426,7 +379,7 @@ export default function PostItemScreen({ navigation, route }) {
       />
       <FieldError message={fieldErrors.location} />
 
-      <Text style={styles.label}>Category</Text>
+      <Label>Category</Label>
       {options.categories.length ? (
         <CategoryChips
           categories={options.categories}
@@ -443,7 +396,7 @@ export default function PostItemScreen({ navigation, route }) {
 
       {editId ? null : (
         <>
-          <Text style={[styles.label, styles.gap]}>Photograph</Text>
+          <Label style={styles.gap}>Photograph</Label>
           <Text style={type.meta}>
             Don't show anything that gives away your private answers, like a sticker or what's inside.
           </Text>
@@ -457,7 +410,7 @@ export default function PostItemScreen({ navigation, route }) {
         </>
       )}
 
-      <Text style={[styles.label, styles.gap]}>Private questions<Text style={styles.required} accessibilityLabel="required"> *</Text></Text>
+      <Label required style={styles.gap}>Private questions</Label>
       <Text style={type.meta}>
         Only the real owner should know the answer (a sticker, what's inside, a scratch). These are never shown publicly.
       </Text>
@@ -489,21 +442,10 @@ export default function PostItemScreen({ navigation, route }) {
       ) : null}
 
       {error ? <Text style={styles.error}>{error}</Text> : null}
-      {notice ? <Text style={styles.notice}>{notice}</Text> : null}
 
       <Pressable style={[styles.button, busy && styles.disabled]} onPress={review} disabled={busy}>
         <Text style={styles.buttonText}>{editId ? "Review changes" : "Post lost item"}</Text>
       </Pressable>
-      {editId ? null : (
-        <Pressable style={[styles.secondary, busy && styles.disabled]} onPress={saveDraft} disabled={busy}>
-          <Text style={styles.secondaryText}>Save draft</Text>
-        </Pressable>
-      )}
-      {hasDraft && !editId ? (
-        <Pressable onPress={discardDraft} disabled={busy}>
-          <Text style={[styles.link, styles.discard]}>Discard draft</Text>
-        </Pressable>
-      ) : null}
     </ScrollView>
   );
 }
@@ -555,8 +497,6 @@ const styles = StyleSheet.create({
     marginTop: spacing.md,
   },
   secondaryText: { fontSize: 16, fontWeight: "700", color: colors.teal },
-  notice: { color: colors.teal, marginTop: spacing.md },
-  discard: { marginTop: spacing.md, color: colors.danger },
   disabled: ui.disabled,
   buttonText: ui.buttonText,
   link: { color: colors.teal, fontWeight: "600" },

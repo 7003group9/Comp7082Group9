@@ -167,9 +167,8 @@ test('posting rejects photos that are not images', () =>
     }
   }));
 
-test('drafts, my posts, editing and deleting need login', () =>
+test('my posts, editing and deleting need login', () =>
   withServer(async (base) => {
-    for (const method of ['GET', 'PUT', 'DELETE']) assert.equal(await status(`${base}/items/draft`, { method }), 401);
     assert.equal(await status(`${base}/items/mine`), 401);
     assert.equal(await status(`${base}/items/1/edit`), 401);
     assert.equal(await status(`${base}/items/1`, { method: 'PUT' }), 401);
