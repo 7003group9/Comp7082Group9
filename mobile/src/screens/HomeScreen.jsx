@@ -18,7 +18,7 @@ import ItemCard from "../components/ItemCard";
 import PostButton from "../components/PostButton";
 import SearchBar from "../components/SearchBar";
 import FilterPanel from "../components/FilterPanel";
-import { colors, spacing, type } from "../theme";
+import { colors, spacing, type, ui } from "../theme";
 import { buildings } from "../data/options";
 
 // Changes only after `value` has stopped changing for `ms`, so the server
@@ -33,7 +33,7 @@ function useDebounced(value, ms) {
 }
 
 export default function HomeScreen({ navigation }) {
-  const { logout } = useContext(AuthContext);
+  const { user, logout } = useContext(AuthContext);
 
   // items: what's shown; hasMore: the server has older ones; loading: first load;
   // loadingMore / refreshing: next page / pull-to-refresh; error: message to show;
@@ -70,7 +70,7 @@ export default function HomeScreen({ navigation }) {
         location: location.trim(),
         dateFrom: validDateFrom,
         dateTo: validDateTo,
-      });
+      }, user.token);
       if (mine !== latest.current) return;
       setItems(page.items);
       setHasMore(page.hasMore);
@@ -78,7 +78,7 @@ export default function HomeScreen({ navigation }) {
     } catch (e) {
       if (mine === latest.current) setError(e.message);
     }
-  }, [search, category, location, validDateFrom, validDateTo]);
+  }, [search, category, location, validDateFrom, validDateTo, user.token]);
 
   // The filter chips. The list still works if this fails (only "All" shows).
   const loadCategories = () =>
@@ -110,7 +110,7 @@ export default function HomeScreen({ navigation }) {
         dateFrom: validDateFrom,
         dateTo: validDateTo,
         before: items[items.length - 1].id,
-      });
+      }, user.token);
       if (mine !== latest.current) return; // the search changed while this was loading
       setItems((prev) => [...prev, ...page.items]);
       setHasMore(page.hasMore);
@@ -136,11 +136,16 @@ export default function HomeScreen({ navigation }) {
         <Text style={styles.brand}>Campus Claim</Text>
 
         <View style={styles.links}>
-          <Pressable onPress={() => navigation.navigate("MyListings")}>
-            <Text style={styles.logout}>My posts</Text>
+          {user.role === "security" ? (
+            <Pressable style={pressable} onPress={() => navigation.navigate("SecurityDashboard")} accessibilityRole="button">
+              <Text style={ui.smallButtonText}>Review claims</Text>
+            </Pressable>
+          ) : null}
+          <Pressable style={pressable} onPress={() => navigation.navigate("MyListings")} accessibilityRole="button">
+            <Text style={ui.smallButtonText}>My posts</Text>
           </Pressable>
-          <Pressable onPress={logout}>
-            <Text style={styles.logout}>Logout</Text>
+          <Pressable style={pressable} onPress={logout} accessibilityRole="button">
+            <Text style={ui.smallButtonText}>Logout</Text>
           </Pressable>
         </View>
       </View>
@@ -213,10 +218,7 @@ export default function HomeScreen({ navigation }) {
           <ItemCard
             item={item}
             onPress={() =>
-              navigation.navigate("ItemDetail", {
-                id: item.id,
-                title: item.title,
-              })
+              navigation.navigate("ItemDetail", item)
             }
           />
         )}
@@ -244,6 +246,9 @@ export default function HomeScreen({ navigation }) {
   );
 }
 
+// Small header buttons, darker while pressed.
+const pressable = ({ pressed }) => [ui.smallButton, pressed && ui.pressed];
+
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.mist },
   list: { paddingHorizontal: spacing.md, paddingBottom: 120 },
@@ -256,7 +261,7 @@ const styles = StyleSheet.create({
   title: { ...type.title, marginBottom: spacing.xs },
   center: { marginTop: spacing.xl, textAlign: "center", color: colors.slate },
   more: { marginVertical: spacing.md },
-  banner: { color: "#B00020", marginTop: spacing.md },
+  banner: { color: colors.danger, marginTop: spacing.md },
   topRow: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -264,12 +269,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
   },
 
-  links: { flexDirection: "row", gap: spacing.md },
-  logout: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: colors.teal,
-  },
+  links: { flexDirection: "row", gap: spacing.sm },
   filterButton: {
     marginTop: spacing.md,
     padding: 12,

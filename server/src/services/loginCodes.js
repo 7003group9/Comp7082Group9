@@ -1,4 +1,5 @@
 import { randomBytes, randomInt, timingSafeEqual } from 'node:crypto';
+import { TEST_LOGINS } from '../config/env.js';
 
 const TTL = 10 * 60 * 1000; // a code works for 10 minutes
 const COOLDOWN = 60 * 1000; // one new code per email per minute
@@ -19,12 +20,13 @@ const same = (a, b) => {
 };
 
 // Makes { code, challenge } for this email, or null if one was sent too recently.
+// Test accounts (TEST_LOGINS, dev only) always get their fixed code and no cooldown.
 export function issueCode(email, now = Date.now()) {
   // Drop expired codes now and then so the map can't grow forever.
   if (codes.size > 1000) for (const [e, v] of codes) if (now > v.expires) codes.delete(e);
   const prev = codes.get(email);
-  if (prev && now - prev.sentAt < COOLDOWN) return null;
-  const code = String(randomInt(100000, 1000000));
+  if (prev && now - prev.sentAt < COOLDOWN && !TEST_LOGINS.has(email)) return null;
+  const code = TEST_LOGINS.get(email) ?? String(randomInt(100000, 1000000));
   const challenge = randomBytes(16).toString('hex');
   codes.set(email, { code, challenge, expires: now + TTL, sentAt: now, tries: 0 });
   return { code, challenge };

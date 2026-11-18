@@ -1,24 +1,46 @@
-import { query } from "../config/db.js";
+import { query } from '../config/db.js';
+import { userFrom } from '../middleware/auth.js';
 import {
+  BUILDINGS,
   CATEGORIES,
   MAX_OPEN_POSTS,
   MAX_QUESTIONS,
   checkItem,
   clean,
-} from "../services/itemValidation.js";
+  coord,
+} from '../services/itemValidation.js';
 
-// Public fields ONLY. Private questions/answers are never selected here,
-// and sensitive items (IDs, cards, phones) are excluded from the public list.
-const PUBLIC_FIELDS = `id, title, category, location, created_at AS "postedAt", status`;
+// Public fields ONLY. Private questions/answers are never selected here.
+const PUBLIC_FIELDS = `id, title, category, location, building, latitude, longitude, created_at AS "postedAt", status`;
 
 const PAGE_SIZE = 30;
+
+// 400 listing each wrong field, in the shape the post form shows under its fields.
+const formErrors = (res, errors) =>
+  res.status(400).json({ error: Object.values(errors).join(' '), fields: errors });
+
+// Sends 404 / 403 and returns false unless item req.params.id exists and the user posted it.
+async function ownItem(req, res, notYours) {
+  const { rows: [item] } = await query('SELECT finder_id FROM items WHERE id = $1', [req.params.id]);
+  if (!item) res.status(404).json({ error: 'Item not found' });
+  else if (item.finder_id !== req.user.id) res.status(403).json({ error: notYours });
+  return item?.finder_id === req.user.id;
+}
 // Escapes % and _ so a search for "50%" matches those characters literally.
 const likePattern = (s) => `%${s.replace(/[\\%_]/g, "\\$&")}%`;
 
 // GET /items?q=&category=&before=<id>: the newest public items, one page at a time.
 // Reply: { items, hasMore }. Pass the last item's id as `before` for the next page.
 // Searching and filtering happen here so they cover every item, not just the page.
+// What the feed shows (logged in = token sent):
+// - never the user's own posts (they're under My posts);
+// - an item the user's approved claim was for, always, whatever its status;
+// - anyone else's claimed (or dropped-off) item for 24 hours after the claim was approved;
+// - open and claim-pending items.
+// myClaim is the viewer's own claim status on each item ('pending', 'approved',
+// 'rejected'), or null if they haven't claimed it or aren't logged in.
 export async function listItems(req, res) {
+  const me = userFrom(req)?.id ?? null;
   const q = clean(req.query.q, 100);
   const category = clean(req.query.category, 50);
   const location = clean(req.query.location, 100);
@@ -47,15 +69,21 @@ export async function listItems(req, res) {
   }
 
   const { rows } = await query(
-    `SELECT ${PUBLIC_FIELDS} FROM items
-     WHERE is_sensitive = FALSE AND status <> 'handed off'
+    `SELECT ${PUBLIC_FIELDS},
+            (SELECT c.status FROM claims c WHERE c.item_id = items.id AND c.claimant_id = $7) AS "myClaim"
+     FROM items
+     WHERE (status IN ('open', 'claim pending')
+            OR (status IN ('claimed', 'dropped off') AND claimed_at > now() - interval '24 hours')
+            OR EXISTS (SELECT 1 FROM claims c WHERE c.item_id = items.id
+                       AND c.claimant_id = $7 AND c.status = 'approved'))
        AND ($1::int IS NULL OR id < $1)
        AND ($2 = '' OR category = $2)
        AND ($3 = '' OR title ILIKE $3 OR location ILIKE $3)
        AND ($4 = '' OR location ILIKE $4)
        AND ($5::date IS NULL OR (created_at AT TIME ZONE 'America/Vancouver')::date >= $5::date)
-AND ($6::date IS NULL OR (created_at AT TIME ZONE 'America/Vancouver')::date <= $6::date)
-     ORDER BY id DESC LIMIT $7`,
+       AND ($6::date IS NULL OR (created_at AT TIME ZONE 'America/Vancouver')::date <= $6::date)
+       AND ($7::int IS NULL OR finder_id <> $7)
+     ORDER BY id DESC LIMIT $8`,
     [
       before,
       category,
@@ -63,6 +91,7 @@ AND ($6::date IS NULL OR (created_at AT TIME ZONE 'America/Vancouver')::date <= 
       location ? likePattern(location) : "",
       dateFrom || null,
       dateTo || null,
+      me,
       PAGE_SIZE + 1,
     ],
   );
@@ -73,41 +102,33 @@ AND ($6::date IS NULL OR (created_at AT TIME ZONE 'America/Vancouver')::date <= 
   });
 }
 // GET /items/options: what the post form and filters offer. The app builds its
-// pickers from this, so CATEGORIES and MAX_QUESTIONS are the only places to edit.
+// pickers from this, so CATEGORIES, BUILDINGS and MAX_QUESTIONS are the only places to edit.
 export const getFormOptions = (req, res) =>
-  res.json({ categories: CATEGORIES, maxQuestions: MAX_QUESTIONS });
+  res.json({ categories: CATEGORIES, buildings: BUILDINGS, maxQuestions: MAX_QUESTIONS });
 
 export async function getItem(req, res) {
   const { rows } = await query(
-    `SELECT ${PUBLIC_FIELDS} FROM items WHERE id = $1 AND is_sensitive = FALSE`,
-    [req.params.id],
+    `SELECT ${PUBLIC_FIELDS} FROM items WHERE id = $1`,
+    [req.params.id]
   );
   if (!rows[0]) return res.status(404).json({ error: "Item not found" });
   res.json(rows[0]);
 }
 
-// POST /items  { title, category, location, sensitive?, questions: [{ question, answer }] }
-// Sent as JSON, or as a multipart form with up to 3 "photos" (questions as a JSON string).
+// POST /items  { title, category, location, building?, latitude, longitude, questions: [{ question, answer }] }
+// Sent as JSON, or as a multipart form with one "photos" file (questions as a JSON string).
 // Needs login. Incomplete posts get 400 with { error, fields: { field: message } }.
 // The item, its private questions and its photos go in with ONE statement, so
-// either all are saved or none. Sensitive items (the finder ticked "ID, card, wallet
-// or phone") are saved too but never listed publicly; the reply says they go to
-// Campus Security.
+// either all are saved or none.
 export async function createItem(req, res) {
   const photos = req.files ?? [];
   const { item, errors } = checkItem(req.body ?? {}, photos);
-  if (Object.keys(errors).length) {
-    return res
-      .status(400)
-      .json({ error: Object.values(errors).join(" "), fields: errors });
-  }
+  if (Object.keys(errors).length) return formErrors(res, errors);
 
-  // Each student can only have so many posts open at once.
-  const {
-    rows: [{ open }],
-  } = await query(
-    `SELECT count(*)::int AS open FROM items WHERE finder_id = $1 AND status <> 'handed off'`,
-    [req.user.id],
+  // Each student can only have so many posts open at once (dropped off = done with it).
+  const { rows: [{ open }] } = await query(
+    `SELECT count(*)::int AS open FROM items WHERE finder_id = $1 AND status NOT IN ('dropped off', 'handed off')`,
+    [req.user.id]
   );
   if (open >= MAX_OPEN_POSTS) {
     return res
@@ -117,25 +138,24 @@ export async function createItem(req, res) {
       });
   }
 
-  const { title, category, location, questions } = item;
-  const { sensitive } = item;
+  const { title, category, location, building, latitude, longitude, questions } = item;
   // Only mention item_images when there are photos, so posting without photos
   // keeps working on a database that doesn't have that table yet.
   const photoInsert = photos.length
     ? `, imgs AS (
        INSERT INTO item_images (item_id, mime_type, data)
-       SELECT item.id, t.m, t.d FROM item, unnest($8::text[], $9::bytea[]) WITH ORDINALITY AS t(m, d, n)
+       SELECT item.id, t.m, t.d FROM item, unnest($10::text[], $11::bytea[]) WITH ORDINALITY AS t(m, d, n)
        ORDER BY t.n
      )`
     : "";
   const { rows } = await query(
     `WITH item AS (
-       INSERT INTO items (finder_id, title, category, location, is_sensitive)
-       VALUES ($1, $2, $3, $4, $5)
+       INSERT INTO items (finder_id, title, category, location, building, latitude, longitude)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
        RETURNING ${PUBLIC_FIELDS}
      ), qs AS (
        INSERT INTO item_questions (item_id, question, expected_answer)
-       SELECT item.id, t.q, t.a FROM item, unnest($6::text[], $7::text[]) AS t(q, a)
+       SELECT item.id, t.q, t.a FROM item, unnest($8::text[], $9::text[]) AS t(q, a)
      )${photoInsert}
      SELECT * FROM item`,
     [
@@ -143,27 +163,30 @@ export async function createItem(req, res) {
       title,
       category,
       location,
-      sensitive,
+      building,
+      latitude,
+      longitude,
       questions.map((q) => q.question),
       questions.map((q) => q.answer),
       ...(photos.length
         ? [photos.map((p) => p.mimetype), photos.map((p) => p.buffer)]
         : []),
-    ],
+    ]
   );
-  res.status(201).json({ ...rows[0], routedToSecurity: sensitive });
+  res.status(201).json(rows[0]);
 }
 
 // Drafts: one unfinished post per user, kept apart from items so a draft is
 // never listed publicly. Only its owner can read it. Photos aren't kept in drafts.
-// Shape: { title, building, detail, category, sensitive, questions: [{ question, answer }] }.
+// Shape: { title, location, building, latitude, longitude, category, questions: [{ question, answer }] }.
 function cleanDraft(b) {
   return {
     title: clean(b.title),
-    building: clean(b.building),
-    detail: clean(b.detail),
-    category: CATEGORIES.includes(b.category) ? b.category : "Other",
-    sensitive: b.sensitive === true,
+    location: clean(b.location),
+    building: BUILDINGS.includes(b.building) ? b.building : '',
+    latitude: coord(b.latitude, 90),
+    longitude: coord(b.longitude, 180),
+    category: CATEGORIES.includes(b.category) ? b.category : 'Other',
     questions: (Array.isArray(b.questions) ? b.questions : [])
       .slice(0, MAX_QUESTIONS)
       .map((q) => ({ question: clean(q?.question), answer: clean(q?.answer) })),
@@ -197,10 +220,10 @@ export async function deleteDraft(req, res) {
   res.status(204).end();
 }
 
-// GET /items/mine: everything the logged-in user posted, sensitive items included.
+// GET /items/mine: everything the logged-in user posted.
 export async function listMine(req, res) {
   const { rows } = await query(
-    `SELECT ${PUBLIC_FIELDS}, is_sensitive AS "isSensitive" FROM items
+    `SELECT ${PUBLIC_FIELDS} FROM items
      WHERE finder_id = $1 ORDER BY id DESC`,
     [req.user.id],
   );
@@ -210,14 +233,7 @@ export async function listMine(req, res) {
 // DELETE /items/:id: only the finder can delete, and not once someone has
 // claimed it (the claim history has to stay). Private questions go with it.
 export async function deleteItem(req, res) {
-  const { rows } = await query("SELECT finder_id FROM items WHERE id = $1", [
-    req.params.id,
-  ]);
-  if (!rows[0]) return res.status(404).json({ error: "Item not found" });
-  if (rows[0].finder_id !== req.user.id)
-    return res
-      .status(403)
-      .json({ error: "You can only delete your own posts" });
+  if (!(await ownItem(req, res, 'You can only delete your own posts'))) return;
   const { rowCount } = await query(
     `DELETE FROM items WHERE id = $1 AND NOT EXISTS (SELECT 1 FROM claims WHERE item_id = $1)`,
     [req.params.id],
@@ -229,4 +245,104 @@ export async function deleteItem(req, res) {
         error: "Someone has already claimed this item, so it cannot be deleted",
       });
   res.status(204).end();
+}
+
+// Editing: only the finder, and only while nobody has claimed the item (security
+// checks claims against the questions, so they can't change under a claim).
+const NOT_YOURS = 'You can only edit your own posts';
+const LOCKED = 'Someone has already claimed this item, so it can no longer be edited';
+
+// GET /items/:id/edit: the finder's own post with its private answers, to fill the edit form.
+export async function getItemForEdit(req, res) {
+  if (!(await ownItem(req, res, NOT_YOURS))) return;
+  const { rows: [item] } = await query(
+    `SELECT title, category, location, building, latitude, longitude,
+            EXISTS (SELECT 1 FROM claims WHERE item_id = items.id) AS claimed,
+            (SELECT json_agg(json_build_object('question', question, 'answer', expected_answer) ORDER BY id)
+             FROM item_questions WHERE item_id = items.id) AS questions
+     FROM items WHERE id = $1`,
+    [req.params.id]
+  );
+  if (item.claimed) return res.status(409).json({ error: LOCKED });
+  const { claimed, ...post } = item; // eslint-disable-line no-unused-vars
+  res.json({ ...post, questions: post.questions ?? [] });
+}
+
+// PUT /items/:id  { title, category, location, building?, latitude, longitude, questions }
+// Same rules as posting (checkItem). Photos stay as they are. The item and its
+// questions are replaced in ONE statement, and only if it's still unclaimed.
+export async function updateItem(req, res) {
+  if (!(await ownItem(req, res, NOT_YOURS))) return;
+  const { item, errors } = checkItem(req.body ?? {});
+  if (Object.keys(errors).length) return formErrors(res, errors);
+  const { title, category, location, building, latitude, longitude, questions } = item;
+  const { rows } = await query(
+    `WITH item AS (
+       UPDATE items SET title = $2, category = $3, location = $4, building = $5, latitude = $6, longitude = $7
+       WHERE id = $1 AND NOT EXISTS (SELECT 1 FROM claims WHERE item_id = $1)
+       RETURNING ${PUBLIC_FIELDS}
+     ), old AS (
+       DELETE FROM item_questions WHERE item_id IN (SELECT id FROM item)
+     ), qs AS (
+       INSERT INTO item_questions (item_id, question, expected_answer)
+       SELECT item.id, t.q, t.a FROM item, unnest($8::text[], $9::text[]) AS t(q, a)
+     )
+     SELECT * FROM item`,
+    [req.params.id, title, category, location, building, latitude, longitude,
+     questions.map((q) => q.question), questions.map((q) => q.answer)]
+  );
+  if (!rows[0]) return res.status(409).json({ error: LOCKED });
+  res.json(rows[0]);
+}
+
+// POST /items/:id/received (security only): the finder handed a claimed item in at
+// the Campus Security desk, so it's marked 'dropped off'. Only once, only after a claim was approved.
+export async function markReceived(req, res) {
+  const { rows: [item] } = await query('SELECT status FROM items WHERE id = $1', [req.params.id]);
+  if (!item) return res.status(404).json({ error: 'Item not found' });
+  const { rows } = await query(
+    `UPDATE items SET status = 'dropped off' WHERE id = $1 AND status = 'claimed' RETURNING ${PUBLIC_FIELDS}`,
+    [req.params.id]
+  );
+  if (!rows[0]) {
+    const error = item.status === 'dropped off' ? 'This item was already marked as received.' : "No claim on this item has been approved yet.";
+    return res.status(409).json({ error });
+  }
+  res.json(rows[0]);
+}
+
+// POST /items/:id/handed-off (security only): the owner collected the item at the desk.
+// Records who handed it over and when (handoffs), and marks the item 'handed off', in ONE
+// statement. Only for an item that was received ('dropped off'), and only once.
+export async function markHandedOff(req, res) {
+  const { rows } = await query(
+    `WITH item AS (
+       UPDATE items SET status = 'handed off' WHERE id = $1 AND status = 'dropped off' RETURNING id
+     )
+     INSERT INTO handoffs (claim_id, staff_id)
+     SELECT c.id, $2 FROM claims c JOIN item ON c.item_id = item.id WHERE c.status = 'approved'
+     RETURNING completed_at AS "pickedUpAt"`,
+    [req.params.id, req.user.id]
+  );
+  if (!rows[0]) return res.status(409).json({ error: "This item isn't waiting at the desk, or was already picked up." });
+  res.json(rows[0]);
+}
+
+// GET /items/history (security only): every post, newest first, with who found it and,
+// once collected, who picked it up, when, and which staff member handed it over.
+// ponytail: no paging; add `before` paging like the feed if this list gets long.
+export async function listHistory(req, res) {
+  const { rows } = await query(
+    `SELECT i.id, i.title, i.location, i.building, i.status, i.created_at AS "postedAt",
+            f.school_email AS "finderEmail",
+            o.school_email AS "pickedUpBy", h.completed_at AS "pickedUpAt", s.school_email AS "handedOverBy"
+     FROM items i
+     JOIN users f ON f.id = i.finder_id
+     LEFT JOIN claims c ON c.item_id = i.id AND c.status = 'approved'
+     LEFT JOIN users o ON o.id = c.claimant_id
+     LEFT JOIN handoffs h ON h.claim_id = c.id
+     LEFT JOIN users s ON s.id = h.staff_id
+     ORDER BY i.id DESC`
+  );
+  res.json(rows);
 }

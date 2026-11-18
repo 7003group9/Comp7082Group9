@@ -1,6 +1,6 @@
-// App root: sets up navigation and the three screens that exist so far.
+// App root: sets up navigation and the app's screens.
 
-import { NavigationContainer } from "@react-navigation/native";
+import { DarkTheme, NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { View } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
@@ -9,6 +9,9 @@ import LoginScreen from "./src/screens/LoginScreen";
 import ItemDetailScreen from "./src/screens/ItemDetailScreen";
 import PostItemScreen from "./src/screens/PostItemScreen";
 import MyListingsScreen from "./src/screens/MyListingsScreen";
+import SecurityDashboardScreen from "./src/screens/SecurityDashboardScreen";
+import HistoryScreen from "./src/screens/HistoryScreen";
+import ClaimDetailScreen from "./src/screens/ClaimDetailScreen";
 import { colors } from "./src/theme";
 import { AuthProvider, AuthContext } from "./src/context/AuthContext";
 import { useContext } from "react";
@@ -23,11 +26,18 @@ const frame = {
 
 // Stack navigator: screens push on top of each other with a back button.
 const Stack = createNativeStackNavigator();
+// The app is dark; tell the browser, so scrollbars and form controls match.
+if (typeof document !== "undefined") document.documentElement.style.colorScheme = "dark";
+// React Navigation's own colours (header, screen background) to match the app's.
+const navTheme = {
+  ...DarkTheme,
+  colors: { ...DarkTheme.colors, background: colors.mist, card: colors.mist, text: colors.ink, primary: colors.teal, border: colors.line },
+};
 function AppNavigator() {
   const { user } = useContext(AuthContext);
 
   return (
-    <NavigationContainer>
+    <NavigationContainer theme={navTheme}>
       <Stack.Navigator
         screenOptions={{
           headerTintColor: colors.ink,
@@ -47,7 +57,7 @@ function AppNavigator() {
             <Stack.Screen
               name="ItemDetail"
               component={ItemDetailScreen}
-              options={{ title: "Found item" }}
+              options={{ title: "Found item", headerTitle: "" }} // just the back arrow; title stays for the browser tab
             />
 
             <Stack.Screen
@@ -61,6 +71,23 @@ function AppNavigator() {
               component={MyListingsScreen}
               options={{ title: "My posts" }}
             />
+
+            {/* Campus Security only; the server also refuses everyone else. */}
+            {user.role === "security" ? (
+              <>
+                <Stack.Screen
+                  name="SecurityDashboard"
+                  component={SecurityDashboardScreen}
+                  options={{ title: "Review claims" }}
+                />
+                <Stack.Screen name="History" component={HistoryScreen} options={{ title: "Past posts" }} />
+                <Stack.Screen
+                  name="ClaimDetail"
+                  component={ClaimDetailScreen}
+                  options={{ title: "Claim" }}
+                />
+              </>
+            ) : null}
           </>
         ) : (
           <Stack.Screen
@@ -78,8 +105,10 @@ export default function App() {
   return (
     <AuthProvider>
       <SafeAreaProvider>
-        <View style={frame}>
-          <AppNavigator />
+        <View style={{ flex: 1, backgroundColor: colors.mist }}>
+          <View style={frame}>
+            <AppNavigator />
+          </View>
         </View>
       </SafeAreaProvider>
     </AuthProvider>
