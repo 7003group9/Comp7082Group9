@@ -1,11 +1,10 @@
-// /items routes: public list, single item, posting (with photos), drafts, and managing your own posts.
+// /items routes: public list, single item, posting (with photos), and managing your own posts.
 import { Router } from 'express';
 import {
-  listItems, getFormOptions, getItem, getItemForEdit, createItem, updateItem, markReceived, markHandedOff, listHistory, listMine, deleteItem, getDraft, saveDraft, deleteDraft,
+  listItems, getFormOptions, getItem, getItemForEdit, createItem, updateItem, markReceived, markHandedOff, listHistory, listMine, deleteItem,
 } from '../controllers/items.controller.js';
 import { claimForm } from '../controllers/claims.controller.js';
-import { requireAuth } from '../middleware/auth.js';
-import { requireRole } from '../middleware/requireRole.js';
+import { requireAuth, requireRole } from '../middleware/auth.js';
 import { photos } from '../middleware/upload.js';
 
 const router = Router();
@@ -14,13 +13,10 @@ router.param('id', (req, res, next, id) =>
   /^\d{1,9}$/.test(id) ? next() : res.status(400).json({ error: 'Invalid item id' })
 );
 router.get('/', listItems);
-// '/options', '/mine', '/draft' and '/history' must stay above '/:id'.
+// '/options', '/mine' and '/history' must stay above '/:id'.
 router.get('/options', getFormOptions);
 router.get('/history', requireAuth, requireRole('security'), listHistory); // every post, with pickups
 router.get('/mine', requireAuth, listMine);
-router.get('/draft', requireAuth, getDraft);
-router.put('/draft', requireAuth, saveDraft);
-router.delete('/draft', requireAuth, deleteDraft);
 router.get('/:id', getItem);
 router.get('/:id/questions', requireAuth, claimForm); // the claim form: question text only
 router.get('/:id/edit', requireAuth, getItemForEdit); // the finder's own post, answers included

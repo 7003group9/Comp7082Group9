@@ -1,4 +1,4 @@
-// /auth routes (mounted in routes/index.js): email-code login.
+// /auth routes (mounted in app.js): email-code login.
 import { Router } from 'express';
 import { requestCode, verifyCode } from '../controllers/auth.controller.js';
 

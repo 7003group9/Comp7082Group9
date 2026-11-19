@@ -2,8 +2,7 @@
 // (GET /review, POST /:id/decision).
 import { Router } from 'express';
 import { claimsToReview, createClaim, decideClaim } from '../controllers/claims.controller.js';
-import { requireAuth } from '../middleware/auth.js';
-import { requireRole } from '../middleware/requireRole.js';
+import { requireAuth, requireRole } from '../middleware/auth.js';
 
 const router = Router();
 const security = [requireAuth, requireRole('security')];
