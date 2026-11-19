@@ -1,7 +1,7 @@
 CREATE TABLE IF NOT EXISTS users (
   id           SERIAL PRIMARY KEY,
-  school_email TEXT UNIQUE NOT NULL,
-  role         TEXT NOT NULL DEFAULT 'student' CHECK (role IN ('student', 'security'))
+  school_email TEXT UNIQUE,
+  role         TEXT NOT NULL DEFAULT 'student' CHECK (role IN ('student', 'security', 'guest'))
 );
 
 CREATE TABLE IF NOT EXISTS items (
@@ -15,7 +15,8 @@ CREATE TABLE IF NOT EXISTS items (
   longitude           DOUBLE PRECISION CHECK (longitude BETWEEN -180 AND 180),
   status              TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'claim pending', 'claimed', 'dropped off', 'handed off')),  -- claimed = a claim was approved; dropped off = the finder left it at Campus Security
   created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),  -- when it was posted
-  claimed_at          TIMESTAMPTZ                          -- when a claim was approved; the feed hides it 24h later
+  claimed_at          TIMESTAMPTZ,                          -- when a claim was approved; the feed hides it 24h later
+  flagged_unclaimed   BOOLEAN NOT NULL DEFAULT FALSE
 );
 
 -- PRIVATE: expected_answer never leaves the server. Only the question text is

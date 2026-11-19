@@ -67,6 +67,9 @@ export const requestCode = (email) => post("/auth/request-code", { email });
 export const verifyCode = (email, code, challenge) =>
   post("/auth/verify-code", { email, code, challenge });
 
+// Log in as a guest without a student email.
+export const guestLogin = () => post("/auth/guest");
+
 // Post a found item: { title, category, location, building?, latitude, longitude, questions: [{ question, answer }] },
 // plus an optional photo (a File object in photos), which is sent as a multipart form.
 export function createItem({ photos = [], ...item }, token) {
