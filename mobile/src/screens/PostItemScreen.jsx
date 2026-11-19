@@ -223,7 +223,7 @@ export default function PostItemScreen({ navigation, route }) {
         return;
       }
       await createItem({ ...post, photos: photos.map((p) => p.file) }, user.token);
-      navigation.navigate("Home"); // the list reloads when it comes back into view
+      navigation.replace("DropOff"); 
     } catch (err) {
       // The server said which fields are wrong: back to the form to show them there.
       if (err.fields) {
