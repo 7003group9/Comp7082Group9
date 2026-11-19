@@ -7,8 +7,8 @@ import StatusLabel from "../components/StatusLabel";
 import { useConfirm, useFocusList } from "../hooks";
 import { colors, spacing, type, ui } from "../theme";
 
-// The items I posted, each with a delete button. Claims on them are reviewed by
-// Campus Security, not the finder.
+// The items I posted. Edit and Delete only while nobody has claimed them; after
+// that, what to do next (drop it off, or nothing). Campus Security reviews the claims.
 export default function MyListingsScreen({ navigation }) {
   const { user } = useContext(AuthContext);
   const { list: items, setList: setItems, loading, error, setError } = useFocusList(

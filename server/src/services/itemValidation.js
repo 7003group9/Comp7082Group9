@@ -1,12 +1,9 @@
-// Checks a new post before it is saved. Kept free of Express and the database
-// so the rules can be unit tested.
-
 // The app gets these from GET /items/options, so this is the only list to edit.
 export const CATEGORIES = ['Bags', 'Bottles', 'Clothing', 'Electronics', 'Keys', 'Other'];
 export const MAX_QUESTIONS = 3;
 // Campus buildings and lots a finder can pick from (optional). Also sent by GET /items/options.
 export const BUILDINGS = ['NE1','NE2','NE3','NE4','NE4 WorkYard','NE6','NE7','NE8','NE9','NE10','NE12','NE14','NE16','NE18','NE20','NE21','NE22','NE23','NE24','NE25','NE28','NW1','NW3','NW4','NW5','NW6','SE1','SE2','SE3','SE4','SE6','SE8','SE9','SE10','SE12','SE14','SE16','SE19','SE28','SE30','SE40','SE42','SE50','SE52','SW1','SW2','SW3','SW5','SW7','SW9','SW10','SW11','SW12','SW13','SW14','SW15','SW16','LOT A','LOT B','LOT D','LOT E','LOT G','LOT H','LOT J','LOT L','LOT M','LOT N','LOT Q','LOT R','LOT S','LOT T','P5','P7','P8','P12','P15','P20','P21','P22','P24','P25','P26','P28','P29','CARI','HOOP'];
-// A student can have this many posts that haven't been handed off at once.
+// A student can have this many posts that haven't been dropped off at Campus Security at once.
 export const MAX_OPEN_POSTS = 20;
 
 // Photos: what the upload accepts, and the first bytes each type must start with,
