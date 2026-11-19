@@ -1,8 +1,6 @@
 import { query } from '../config/db.js';
 import { userFrom } from '../middleware/auth.js';
-
 import { BUILDINGS, CATEGORIES, MAX_OPEN_POSTS, MAX_QUESTIONS, checkItem, clean } from '../services/itemValidation.js';
-
 
 // Public fields ONLY. Private questions/answers are never selected here.
 const PUBLIC_FIELDS = `id, title, category, location, building, latitude, longitude, created_at AS "postedAt", status`;
@@ -21,7 +19,7 @@ async function ownItem(req, res, notYours) {
   return item?.finder_id === req.user.id;
 }
 // Escapes % and _ so a search for "50%" matches those characters literally.
-const likePattern = (s) => `%${s.replace(/[\\%_]/g, "\\$&")}%`;
+const likePattern = (s) => `%${s.replace(/[\\%_]/g, '\\$&')}%`;
 
 // GET /items?q=&category=&before=<id>: the newest public items, one page at a time.
 // Reply: { items, hasMore }. Pass the last item's id as `before` for the next page.
@@ -105,7 +103,7 @@ export async function getItem(req, res) {
     `SELECT ${PUBLIC_FIELDS} FROM items WHERE id = $1`,
     [req.params.id]
   );
-  if (!rows[0]) return res.status(404).json({ error: "Item not found" });
+  if (!rows[0]) return res.status(404).json({ error: 'Item not found' });
   res.json(rows[0]);
 }
 
@@ -154,7 +152,7 @@ export async function listMine(req, res) {
   const { rows } = await query(
     `SELECT ${PUBLIC_FIELDS} FROM items
      WHERE finder_id = $1 ORDER BY id DESC`,
-    [req.user.id],
+    [req.user.id]
   );
   res.json(rows);
 }
@@ -165,14 +163,9 @@ export async function deleteItem(req, res) {
   if (!(await ownItem(req, res, 'You can only delete your own posts'))) return;
   const { rowCount } = await query(
     `DELETE FROM items WHERE id = $1 AND NOT EXISTS (SELECT 1 FROM claims WHERE item_id = $1)`,
-    [req.params.id],
+    [req.params.id]
   );
-  if (!rowCount)
-    return res
-      .status(409)
-      .json({
-        error: "Someone has already claimed this item, so it cannot be deleted",
-      });
+  if (!rowCount) return res.status(409).json({ error: 'Someone has already claimed this item, so it cannot be deleted' });
   res.status(204).end();
 }
 
