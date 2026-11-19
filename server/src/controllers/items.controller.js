@@ -35,25 +35,64 @@ export async function listItems(req, res) {
   const me = userFrom(req)?.id ?? null;
   const q = clean(req.query.q, 100);
   const category = clean(req.query.category, 50);
-  const before = /^\d{1,9}$/.test(req.query.before ?? '') ? Number(req.query.before) : null;
+  const location = clean(req.query.location, 100);
+  const dateFrom = req.query.dateFrom ?? "";
+  const dateTo = req.query.dateTo ?? "";
+
+  const before = /^\d{1,9}$/.test(req.query.before ?? "")
+    ? Number(req.query.before)
+    : null;
+
+  // Validate date filters
+  const validDate = (value) =>
+    value === "" ||
+    (/^\d{4}-\d{2}-\d{2}$/.test(value) &&
+      !Number.isNaN(Date.parse(value)) &&
+      new Date(value).toISOString().slice(0, 10) === value);
+
+  if (!validDate(dateFrom) || !validDate(dateTo)) {
+    return res.status(400).json({ error: "Invalid date format" });
+  }
+
+  if (dateFrom && dateTo && dateFrom > dateTo) {
+    return res
+      .status(400)
+      .json({ error: "Start date must be before end date" });
+  }
+
   const { rows } = await query(
     `SELECT ${PUBLIC_FIELDS},
-            (SELECT c.status FROM claims c WHERE c.item_id = items.id AND c.claimant_id = $5) AS "myClaim"
+            (SELECT c.status FROM claims c WHERE c.item_id = items.id AND c.claimant_id = $7) AS "myClaim"
      FROM items
      WHERE (status IN ('open', 'claim pending')
             OR (status IN ('claimed', 'dropped off') AND claimed_at > now() - interval '24 hours')
             OR EXISTS (SELECT 1 FROM claims c WHERE c.item_id = items.id
-                       AND c.claimant_id = $5 AND c.status = 'approved'))
+                       AND c.claimant_id = $7 AND c.status = 'approved'))
        AND ($1::int IS NULL OR id < $1)
        AND ($2 = '' OR category = $2)
        AND ($3 = '' OR title ILIKE $3 OR location ILIKE $3)
-       AND ($5::int IS NULL OR finder_id <> $5)
-     ORDER BY id DESC LIMIT $4`,
-    [before, category, q ? likePattern(q) : '', PAGE_SIZE + 1, me]
+       AND ($4 = '' OR building = $4)
+       AND ($5::date IS NULL OR (created_at AT TIME ZONE 'America/Vancouver')::date >= $5::date)
+       AND ($6::date IS NULL OR (created_at AT TIME ZONE 'America/Vancouver')::date <= $6::date)
+       AND ($7::int IS NULL OR finder_id <> $7)
+     ORDER BY id DESC LIMIT $8`,
+    [
+      before,
+      category,
+      q ? likePattern(q) : "",
+      location,
+      dateFrom || null,
+      dateTo || null,
+      me,
+      PAGE_SIZE + 1,
+    ],
   );
-  res.json({ items: rows.slice(0, PAGE_SIZE), hasMore: rows.length > PAGE_SIZE });
-}
 
+  res.json({
+    items: rows.slice(0, PAGE_SIZE),
+    hasMore: rows.length > PAGE_SIZE,
+  });
+}
 // GET /items/options: what the post form and filters offer. The app builds its
 // pickers from this, so CATEGORIES, BUILDINGS and MAX_QUESTIONS are the only places to edit.
 export const getFormOptions = (req, res) =>

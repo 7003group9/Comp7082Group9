@@ -17,6 +17,7 @@ import CategoryChips from "../components/CategoryChips";
 import ItemCard from "../components/ItemCard";
 import PostButton from "../components/PostButton";
 import SearchBar from "../components/SearchBar";
+import FilterPanel from "../components/FilterPanel";
 import { colors, spacing, type, ui } from "../theme";
 
 // Changes only after `value` has stopped changing for `ms`, so the server
@@ -44,7 +45,12 @@ export default function HomeScreen({ navigation }) {
   const [error, setError] = useState(null);
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("All");
+  const [location, setLocation] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [showFilters, setShowFilters] = useState(false);
   const [categories, setCategories] = useState(["All"]);
+  const [buildings, setBuildings] = useState([]);
   const search = useDebounced(query.trim(), 300);
   // Numbers each first-page request, so a slow reply to an old search can't
   // overwrite the results of a newer one.
@@ -52,10 +58,22 @@ export default function HomeScreen({ navigation }) {
 
   // The newest page for the current search and category, replacing what's shown.
   // The server does the searching, so it covers every item, not just the loaded ones.
+  const validDateFrom = /^\d{4}-\d{2}-\d{2}$/.test(dateFrom) ? dateFrom : "";
+
+  const validDateTo = /^\d{4}-\d{2}-\d{2}$/.test(dateTo) ? dateTo : "";
   const loadFirst = useCallback(async () => {
     const mine = ++latest.current;
     try {
-      const page = await fetchItems({ q: search, category }, user.token);
+      const page = await fetchItems(
+        {
+          q: search,
+          category,
+          location: location.trim(),
+          dateFrom: validDateFrom,
+          dateTo: validDateTo,
+        },
+        user.token,
+      );
       if (mine !== latest.current) return;
       setItems(page.items);
       setHasMore(page.hasMore);
@@ -63,12 +81,15 @@ export default function HomeScreen({ navigation }) {
     } catch (e) {
       if (mine === latest.current) setError(e.message);
     }
-  }, [search, category, user.token]);
+  }, [search, category, location, validDateFrom, validDateTo, user.token]);
 
   // The filter chips. The list still works if this fails (only "All" shows).
   const loadCategories = () =>
     fetchOptions()
-      .then((o) => setCategories(["All", ...o.categories]))
+      .then((o) => {
+        setCategories(["All", ...o.categories]);
+        setBuildings(o.buildings ?? []);
+      })
       .catch(() => {});
   useEffect(() => {
     loadCategories();
@@ -88,7 +109,17 @@ export default function HomeScreen({ navigation }) {
     const mine = latest.current;
     setLoadingMore(true);
     try {
-      const page = await fetchItems({ q: search, category, before: items[items.length - 1].id }, user.token);
+      const page = await fetchItems(
+        {
+          q: search,
+          category,
+          location: location.trim(),
+          dateFrom: validDateFrom,
+          dateTo: validDateTo,
+          before: items[items.length - 1].id,
+        },
+        user.token,
+      );
       if (mine !== latest.current) return; // the search changed while this was loading
       setItems((prev) => [...prev, ...page.items]);
       setHasMore(page.hasMore);
@@ -115,14 +146,26 @@ export default function HomeScreen({ navigation }) {
 
         <View style={styles.links}>
           {user.role === "security" ? (
-            <Pressable style={pressable} onPress={() => navigation.navigate("SecurityDashboard")} accessibilityRole="button">
+            <Pressable
+              style={pressable}
+              onPress={() => navigation.navigate("SecurityDashboard")}
+              accessibilityRole="button"
+            >
               <Text style={ui.smallButtonText}>Review claims</Text>
             </Pressable>
           ) : null}
-          <Pressable style={pressable} onPress={() => navigation.navigate("MyListings")} accessibilityRole="button">
+          <Pressable
+            style={pressable}
+            onPress={() => navigation.navigate("MyListings")}
+            accessibilityRole="button"
+          >
             <Text style={ui.smallButtonText}>My posts</Text>
           </Pressable>
-          <Pressable style={pressable} onPress={logout} accessibilityRole="button">
+          <Pressable
+            style={pressable}
+            onPress={logout}
+            accessibilityRole="button"
+          >
             <Text style={ui.smallButtonText}>Logout</Text>
           </Pressable>
         </View>
@@ -133,11 +176,36 @@ export default function HomeScreen({ navigation }) {
         Find it below and answer the finder's question to claim it.
       </Text>
       <SearchBar value={query} onChangeText={setQuery} />
-      <CategoryChips
-        categories={categories}
-        selected={category}
-        onSelect={setCategory}
-      />
+
+      <Pressable
+        style={styles.filterButton}
+        onPress={() => setShowFilters(!showFilters)}
+      >
+        <Text style={styles.filterButtonText}>
+          {showFilters ? "Hide filters ▲" : "Filters ▼"}
+        </Text>
+      </Pressable>
+
+      {showFilters ? (
+        <FilterPanel
+          categories={categories}
+          category={category}
+          setCategory={setCategory}
+          location={location}
+          setLocation={setLocation}
+          dateFrom={dateFrom}
+          setDateFrom={setDateFrom}
+          dateTo={dateTo}
+          setDateTo={setDateTo}
+          buildings={buildings}
+        />
+      ) : (
+        <CategoryChips
+          categories={categories}
+          selected={category}
+          onSelect={setCategory}
+        />
+      )}
       {/* A failed refresh while items are on screen: say so instead of failing silently. */}
       {error && items.length ? (
         <Text style={styles.banner}>{error}. Pull down to try again.</Text>
@@ -170,15 +238,15 @@ export default function HomeScreen({ navigation }) {
         renderItem={({ item }) => (
           <ItemCard
             item={item}
-            onPress={() =>
-              navigation.navigate("ItemDetail", item)
-            }
+            onPress={() => navigation.navigate("ItemDetail", item)}
           />
         )}
         ListHeaderComponent={header}
         ListEmptyComponent={empty}
         ListFooterComponent={
-          loadingMore ? <ActivityIndicator style={styles.more} color={colors.teal} /> : null
+          loadingMore ? (
+            <ActivityIndicator style={styles.more} color={colors.teal} />
+          ) : null
         }
         onEndReached={loadMore}
         onEndReachedThreshold={0.5}
@@ -221,4 +289,16 @@ const styles = StyleSheet.create({
   },
 
   links: { flexDirection: "row", gap: spacing.sm },
+  filterButton: {
+    marginTop: spacing.md,
+    padding: 12,
+    backgroundColor: colors.teal,
+    borderRadius: 8,
+    alignItems: "center",
+  },
+  filterButtonText: {
+    color: colors.onAccent,
+    fontWeight: "600",
+    fontSize: 14,
+  },
 });

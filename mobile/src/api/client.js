@@ -36,14 +36,25 @@ const post = (path, body, token) => send("POST", path, body, token);
 // q = search text, category = a category name or "All", before = the id of the
 // last item already shown (to get the next page). The server does the filtering.
 // With the login token, the user's own posts are left out (they're in My posts).
-export function fetchItems({ q, category, before } = {}, token) {
+export function fetchItems({
+  q,
+  category,
+  before,
+  location,
+  dateFrom,
+  dateTo,
+} = {}, token) {
   const params = new URLSearchParams();
+
   if (q) params.set("q", q);
   if (category && category !== "All") params.set("category", category);
   if (before) params.set("before", before);
+  if (location) params.set("location", location);
+  if (dateFrom) params.set("dateFrom", dateFrom);
+  if (dateTo) params.set("dateTo", dateTo);
+
   return send("GET", `/items?${params}`, undefined, token);
 }
-
 // What the post form and filters offer: { categories, buildings, maxQuestions }.
 // The server is the one place these live.
 export const fetchOptions = () => send("GET", "/items/options");
