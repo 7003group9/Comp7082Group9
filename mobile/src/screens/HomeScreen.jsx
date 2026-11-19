@@ -19,7 +19,6 @@ import PostButton from "../components/PostButton";
 import SearchBar from "../components/SearchBar";
 import FilterPanel from "../components/FilterPanel";
 import { colors, spacing, type, ui } from "../theme";
-import { buildings } from "../data/options";
 
 // Changes only after `value` has stopped changing for `ms`, so the server
 // isn't asked a question on every keystroke.
@@ -51,6 +50,7 @@ export default function HomeScreen({ navigation }) {
   const [dateTo, setDateTo] = useState("");
   const [showFilters, setShowFilters] = useState(false);
   const [categories, setCategories] = useState(["All"]);
+  const [buildings, setBuildings] = useState([]);
   const search = useDebounced(query.trim(), 300);
   // Numbers each first-page request, so a slow reply to an old search can't
   // overwrite the results of a newer one.
@@ -64,13 +64,16 @@ export default function HomeScreen({ navigation }) {
   const loadFirst = useCallback(async () => {
     const mine = ++latest.current;
     try {
-      const page = await fetchItems({
-        q: search,
-        category,
-        location: location.trim(),
-        dateFrom: validDateFrom,
-        dateTo: validDateTo,
-      }, user.token);
+      const page = await fetchItems(
+        {
+          q: search,
+          category,
+          location: location.trim(),
+          dateFrom: validDateFrom,
+          dateTo: validDateTo,
+        },
+        user.token,
+      );
       if (mine !== latest.current) return;
       setItems(page.items);
       setHasMore(page.hasMore);
@@ -83,7 +86,10 @@ export default function HomeScreen({ navigation }) {
   // The filter chips. The list still works if this fails (only "All" shows).
   const loadCategories = () =>
     fetchOptions()
-      .then((o) => setCategories(["All", ...o.categories]))
+      .then((o) => {
+        setCategories(["All", ...o.categories]);
+        setBuildings(o.buildings ?? []);
+      })
       .catch(() => {});
   useEffect(() => {
     loadCategories();
@@ -103,14 +109,17 @@ export default function HomeScreen({ navigation }) {
     const mine = latest.current;
     setLoadingMore(true);
     try {
-      const page = await fetchItems({
-        q: search,
-        category,
-        location: location.trim(),
-        dateFrom: validDateFrom,
-        dateTo: validDateTo,
-        before: items[items.length - 1].id,
-      }, user.token);
+      const page = await fetchItems(
+        {
+          q: search,
+          category,
+          location: location.trim(),
+          dateFrom: validDateFrom,
+          dateTo: validDateTo,
+          before: items[items.length - 1].id,
+        },
+        user.token,
+      );
       if (mine !== latest.current) return; // the search changed while this was loading
       setItems((prev) => [...prev, ...page.items]);
       setHasMore(page.hasMore);
@@ -137,14 +146,26 @@ export default function HomeScreen({ navigation }) {
 
         <View style={styles.links}>
           {user.role === "security" ? (
-            <Pressable style={pressable} onPress={() => navigation.navigate("SecurityDashboard")} accessibilityRole="button">
+            <Pressable
+              style={pressable}
+              onPress={() => navigation.navigate("SecurityDashboard")}
+              accessibilityRole="button"
+            >
               <Text style={ui.smallButtonText}>Review claims</Text>
             </Pressable>
           ) : null}
-          <Pressable style={pressable} onPress={() => navigation.navigate("MyListings")} accessibilityRole="button">
+          <Pressable
+            style={pressable}
+            onPress={() => navigation.navigate("MyListings")}
+            accessibilityRole="button"
+          >
             <Text style={ui.smallButtonText}>My posts</Text>
           </Pressable>
-          <Pressable style={pressable} onPress={logout} accessibilityRole="button">
+          <Pressable
+            style={pressable}
+            onPress={logout}
+            accessibilityRole="button"
+          >
             <Text style={ui.smallButtonText}>Logout</Text>
           </Pressable>
         </View>
@@ -217,9 +238,7 @@ export default function HomeScreen({ navigation }) {
         renderItem={({ item }) => (
           <ItemCard
             item={item}
-            onPress={() =>
-              navigation.navigate("ItemDetail", item)
-            }
+            onPress={() => navigation.navigate("ItemDetail", item)}
           />
         )}
         ListHeaderComponent={header}
@@ -278,7 +297,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   filterButtonText: {
-    color: "#FFFFFF",
+    color: colors.onAccent,
     fontWeight: "600",
     fontSize: 14,
   },

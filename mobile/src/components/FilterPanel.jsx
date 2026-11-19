@@ -43,6 +43,7 @@ export default function FilterPanel({
       <TextInput
         style={styles.input}
         placeholder="From (YYYY-MM-DD)"
+        placeholderTextColor={colors.placeholder}
         value={dateFrom}
         onChangeText={setDateFrom}
         autoCapitalize="none"
@@ -51,6 +52,7 @@ export default function FilterPanel({
       <TextInput
         style={styles.input}
         placeholder="To (YYYY-MM-DD)"
+        placeholderTextColor={colors.placeholder}
         value={dateTo}
         onChangeText={setDateTo}
         autoCapitalize="none"
@@ -65,7 +67,7 @@ export default function FilterPanel({
 
 const styles = StyleSheet.create({
   panel: {
-    backgroundColor: "#FFFFFF",
+    backgroundColor: colors.paper,
     padding: spacing.md,
     borderRadius: 12,
     marginTop: spacing.md,
@@ -79,17 +81,18 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 14,
     fontWeight: "600",
-    color: colors.slate,
+    color: colors.ink,
     marginTop: spacing.md,
     marginBottom: spacing.xs,
   },
   input: {
     borderWidth: 1,
-    borderColor: "#CCCCCC",
+    borderColor: colors.line,
+    backgroundColor: colors.paper,
     borderRadius: 8,
     padding: 10,
     marginBottom: spacing.sm,
-    color: colors.slate,
+    color: colors.ink,
   },
   clearButton: {
     marginTop: spacing.md,

@@ -79,7 +79,7 @@ export async function listItems(req, res) {
        AND ($1::int IS NULL OR id < $1)
        AND ($2 = '' OR category = $2)
        AND ($3 = '' OR title ILIKE $3 OR location ILIKE $3)
-       AND ($4 = '' OR location ILIKE $4)
+       AND ($4 = '' OR building = $4)
        AND ($5::date IS NULL OR (created_at AT TIME ZONE 'America/Vancouver')::date >= $5::date)
        AND ($6::date IS NULL OR (created_at AT TIME ZONE 'America/Vancouver')::date <= $6::date)
        AND ($7::int IS NULL OR finder_id <> $7)
@@ -88,7 +88,7 @@ export async function listItems(req, res) {
       before,
       category,
       q ? likePattern(q) : "",
-      location ? likePattern(location) : "",
+      location,
       dateFrom || null,
       dateTo || null,
       me,
