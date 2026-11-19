@@ -1,6 +1,3 @@
-// Checks a new post before it is saved. Kept free of Express and the database
-// so the rules can be unit tested.
-
 // The app gets these from GET /items/options, so this is the only list to edit.
 export const CATEGORIES = ['Bags', 'Bottles', 'Clothing', 'Electronics', 'Keys', 'Other'];
 export const MAX_QUESTIONS = 3;
@@ -24,7 +21,7 @@ export const PHOTO_TYPES = Object.keys(SIGNATURES);
 export const clean = (v, max = 200) => String(v ?? '').trim().slice(0, max);
 
 // One GPS coordinate, or null when missing or out of range (JSON: number, multipart: string).
-const coord = (v, limit) => {
+export const coord = (v, limit) => {
   const n = v == null || v === '' ? NaN : Number(v);
   return Number.isFinite(n) && Math.abs(n) <= limit ? n : null;
 };

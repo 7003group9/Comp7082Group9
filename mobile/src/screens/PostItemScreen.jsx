@@ -15,7 +15,6 @@ const EMPTY_QA = { question: "", answer: "" };
 
 // How long to wait for a GPS fix, and how old a cached one may be.
 const GEO_OPTIONS = { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 };
-const pinLabel = (pin) => `GPS pin saved${pin.accuracy ? ` (within ${pin.accuracy} m)` : ""}`;
 
 // Message for when the device can't give a position. err.code is one of
 // err.PERMISSION_DENIED (1), err.POSITION_UNAVAILABLE (2) or err.TIMEOUT (3).
@@ -100,7 +99,7 @@ export default function PostItemScreen({ navigation, route }) {
   const [loading, setLoading] = useState(!!editId); // editing: fetching the post
   const [title, setTitle] = useState("");
   const [location, setLocation] = useState(""); // the finder's description of the spot
-  const [pin, setPin] = useState(null); // { latitude, longitude, accuracy? } from the device, or null
+  const [pin, setPin] = useState(null); // { latitude, longitude } from the device, or null
   const [building, setBuilding] = useState(""); // optional, one of options.buildings
   const [locating, setLocating] = useState(false); // waiting for the device's position
   const [category, setCategory] = useState("Other");
@@ -171,7 +170,7 @@ export default function PostItemScreen({ navigation, route }) {
     setLocating(true);
     navigator.geolocation.getCurrentPosition(
       ({ coords }) => {
-        setPin({ latitude: coords.latitude, longitude: coords.longitude, accuracy: Math.round(coords.accuracy) });
+        setPin({ latitude: coords.latitude, longitude: coords.longitude });
         clearError("pin");
         setLocating(false);
       },
@@ -270,7 +269,7 @@ export default function PostItemScreen({ navigation, route }) {
           {building ? `${building} · ` : ""}
           {location.trim()}
           {"\n"}
-          <Text style={type.meta}>{pinLabel(pin)}</Text>
+          <Text style={type.meta}>GPS pin saved</Text>
         </Text>
 
         <Text style={styles.label}>Category</Text>
@@ -334,7 +333,7 @@ export default function PostItemScreen({ navigation, route }) {
       <Label required>Where did you find it?</Label>
       {pin ? (
         <View style={styles.pinRow}>
-          <Text style={[type.body, styles.pinText]}>✓ {pinLabel(pin)}</Text>
+          <Text style={[type.body, styles.pinText]}>✓ GPS pin saved</Text>
           <Pressable onPress={() => setPin(null)} accessibilityRole="button" accessibilityLabel="Remove GPS pin">
             <Text style={styles.link}>Remove</Text>
           </Pressable>
