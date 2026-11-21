@@ -15,6 +15,8 @@ import ClaimDetailScreen from "./src/screens/ClaimDetailScreen";
 import { colors } from "./src/theme";
 import { AuthProvider, AuthContext } from "./src/context/AuthContext";
 import { useContext } from "react";
+import NotificationsScreen from "./src/screens/NotificationsScreen";
+import DropOffScreen from "./src/screens/DropOffScreen";
 
 // Phone-width column, centred when viewed in a desktop browser.
 const frame = {
@@ -27,11 +29,19 @@ const frame = {
 // Stack navigator: screens push on top of each other with a back button.
 const Stack = createNativeStackNavigator();
 // The app is dark; tell the browser, so scrollbars and form controls match.
-if (typeof document !== "undefined") document.documentElement.style.colorScheme = "dark";
+if (typeof document !== "undefined")
+  document.documentElement.style.colorScheme = "dark";
 // React Navigation's own colours (header, screen background) to match the app's.
 const navTheme = {
   ...DarkTheme,
-  colors: { ...DarkTheme.colors, background: colors.mist, card: colors.mist, text: colors.ink, primary: colors.teal, border: colors.line },
+  colors: {
+    ...DarkTheme.colors,
+    background: colors.mist,
+    card: colors.mist,
+    text: colors.ink,
+    primary: colors.teal,
+    border: colors.line,
+  },
 };
 function AppNavigator() {
   const { user } = useContext(AuthContext);
@@ -60,17 +70,33 @@ function AppNavigator() {
               options={{ title: "Found item", headerTitle: "" }} // just the back arrow; title stays for the browser tab
             />
 
-            <Stack.Screen
-              name="PostItem"
-              component={PostItemScreen}
-              options={{ title: "Post a found item" }}
-            />
+            {user.role !== "guest" ? (
+              <>
+                <Stack.Screen
+                  name="PostItem"
+                  component={PostItemScreen}
+                  options={{ title: "Post a found item" }}
+                />
 
+                <Stack.Screen
+                  name="MyListings"
+                  component={MyListingsScreen}
+                  options={{ title: "My posts" }}
+                />
+              </>
+            ) : null}
             <Stack.Screen
-              name="MyListings"
-              component={MyListingsScreen}
-              options={{ title: "My posts" }}
+              name="Notifications"
+              component={NotificationsScreen}
+              options={{ title: "Notifications" }}
             />
+            {user.role !== "guest" ? (
+              <Stack.Screen
+                name="DropOff"
+                component={DropOffScreen}
+                options={{ title: "Drop-off instructions" }}
+              />
+            ) : null}
 
             {/* Campus Security only; the server also refuses everyone else. */}
             {user.role === "security" ? (
@@ -80,7 +106,11 @@ function AppNavigator() {
                   component={SecurityDashboardScreen}
                   options={{ title: "Review claims" }}
                 />
-                <Stack.Screen name="History" component={HistoryScreen} options={{ title: "Past posts" }} />
+                <Stack.Screen
+                  name="History"
+                  component={HistoryScreen}
+                  options={{ title: "Past posts" }}
+                />
                 <Stack.Screen
                   name="ClaimDetail"
                   component={ClaimDetailScreen}

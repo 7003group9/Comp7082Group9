@@ -1,25 +1,37 @@
-import { query } from '../config/db.js';
-import { userFrom } from '../middleware/auth.js';
-import { BUILDINGS, CATEGORIES, MAX_OPEN_POSTS, MAX_QUESTIONS, checkItem, clean } from '../services/itemValidation.js';
+import { query } from "../config/db.js";
+import { userFrom } from "../middleware/auth.js";
+import {
+  BUILDINGS,
+  CATEGORIES,
+  MAX_OPEN_POSTS,
+  MAX_QUESTIONS,
+  checkItem,
+  clean,
+} from "../services/itemValidation.js";
 
 // Public fields ONLY. Private questions/answers are never selected here.
-const PUBLIC_FIELDS = `id, title, category, location, building, latitude, longitude, created_at AS "postedAt", status`;
+const PUBLIC_FIELDS = `id, title, category, location, building, latitude, longitude, created_at AS "postedAt", status, flagged_unclaimed AS "flaggedUnclaimed"`;
 
-const PAGE_SIZE = 30;
+const PAGE_SIZE = 20;
 
 // 400 listing each wrong field, in the shape the post form shows under its fields.
 const formErrors = (res, errors) =>
-  res.status(400).json({ error: Object.values(errors).join(' '), fields: errors });
+  res
+    .status(400)
+    .json({ error: Object.values(errors).join(" "), fields: errors });
 
 // Sends 404 / 403 and returns false unless item req.params.id exists and the user posted it.
 async function ownItem(req, res, notYours) {
-  const { rows: [item] } = await query('SELECT finder_id FROM items WHERE id = $1', [req.params.id]);
-  if (!item) res.status(404).json({ error: 'Item not found' });
-  else if (item.finder_id !== req.user.id) res.status(403).json({ error: notYours });
+  const {
+    rows: [item],
+  } = await query("SELECT finder_id FROM items WHERE id = $1", [req.params.id]);
+  if (!item) res.status(404).json({ error: "Item not found" });
+  else if (item.finder_id !== req.user.id)
+    res.status(403).json({ error: notYours });
   return item?.finder_id === req.user.id;
 }
 // Escapes % and _ so a search for "50%" matches those characters literally.
-const likePattern = (s) => `%${s.replace(/[\\%_]/g, '\\$&')}%`;
+const likePattern = (s) => `%${s.replace(/[\\%_]/g, "\\$&")}%`;
 
 // GET /items?q=&category=&before=<id>: the newest public items, one page at a time.
 // Reply: { items, hasMore }. Pass the last item's id as `before` for the next page.
@@ -32,6 +44,13 @@ const likePattern = (s) => `%${s.replace(/[\\%_]/g, '\\$&')}%`;
 // myClaim is the viewer's own claim status on each item ('pending', 'approved',
 // 'rejected'), or null if they haven't claimed it or aren't logged in.
 export async function listItems(req, res) {
+  await query(`
+    UPDATE items
+    SET flagged_unclaimed = TRUE
+    WHERE created_at <= NOW() - INTERVAL '30 days'
+      AND status IN ('open', 'claim pending')
+      AND flagged_unclaimed = FALSE
+  `);
   const me = userFrom(req)?.id ?? null;
   const q = clean(req.query.q, 100);
   const category = clean(req.query.category, 50);
@@ -96,14 +115,18 @@ export async function listItems(req, res) {
 // GET /items/options: what the post form and filters offer. The app builds its
 // pickers from this, so CATEGORIES, BUILDINGS and MAX_QUESTIONS are the only places to edit.
 export const getFormOptions = (req, res) =>
-  res.json({ categories: CATEGORIES, buildings: BUILDINGS, maxQuestions: MAX_QUESTIONS });
+  res.json({
+    categories: CATEGORIES,
+    buildings: BUILDINGS,
+    maxQuestions: MAX_QUESTIONS,
+  });
 
 export async function getItem(req, res) {
   const { rows } = await query(
     `SELECT ${PUBLIC_FIELDS} FROM items WHERE id = $1`,
-    [req.params.id]
+    [req.params.id],
   );
-  if (!rows[0]) return res.status(404).json({ error: 'Item not found' });
+  if (!rows[0]) return res.status(404).json({ error: "Item not found" });
   res.json(rows[0]);
 }
 
@@ -118,15 +141,29 @@ export async function createItem(req, res) {
   if (Object.keys(errors).length) return formErrors(res, errors);
 
   // Each student can only have so many posts open at once (dropped off = done with it).
-  const { rows: [{ open }] } = await query(
+  const {
+    rows: [{ open }],
+  } = await query(
     `SELECT count(*)::int AS open FROM items WHERE finder_id = $1 AND status NOT IN ('dropped off', 'handed off')`,
-    [req.user.id]
+    [req.user.id],
   );
   if (open >= MAX_OPEN_POSTS) {
-    return res.status(429).json({ error: `You already have ${MAX_OPEN_POSTS} posts in progress. Delete an unclaimed one, or drop claimed items off at Campus Security, before posting another.` });
+    return res
+      .status(429)
+      .json({
+        error: `You already have ${MAX_OPEN_POSTS} posts in progress. Delete an unclaimed one, or drop claimed items off at Campus Security, before posting another.`,
+      });
   }
 
-  const { title, category, location, building, latitude, longitude, questions } = item;
+  const {
+    title,
+    category,
+    location,
+    building,
+    latitude,
+    longitude,
+    questions,
+  } = item;
   const { rows } = await query(
     `WITH item AS (
        INSERT INTO items (finder_id, title, category, location, building, latitude, longitude)
@@ -140,9 +177,19 @@ export async function createItem(req, res) {
        SELECT item.id, t.m, t.d FROM item, unnest($10::text[], $11::bytea[]) AS t(m, d)
      )
      SELECT * FROM item`,
-    [req.user.id, title, category, location, building, latitude, longitude,
-     questions.map((q) => q.question), questions.map((q) => q.answer),
-     photos.map((p) => p.mimetype), photos.map((p) => p.buffer)]
+    [
+      req.user.id,
+      title,
+      category,
+      location,
+      building,
+      latitude,
+      longitude,
+      questions.map((q) => q.question),
+      questions.map((q) => q.answer),
+      photos.map((p) => p.mimetype),
+      photos.map((p) => p.buffer),
+    ],
   );
   res.status(201).json(rows[0]);
 }
@@ -152,7 +199,7 @@ export async function listMine(req, res) {
   const { rows } = await query(
     `SELECT ${PUBLIC_FIELDS} FROM items
      WHERE finder_id = $1 ORDER BY id DESC`,
-    [req.user.id]
+    [req.user.id],
   );
   res.json(rows);
 }
@@ -160,30 +207,38 @@ export async function listMine(req, res) {
 // DELETE /items/:id: only the finder can delete, and not once someone has
 // claimed it (the claim history has to stay). Private questions go with it.
 export async function deleteItem(req, res) {
-  if (!(await ownItem(req, res, 'You can only delete your own posts'))) return;
+  if (!(await ownItem(req, res, "You can only delete your own posts"))) return;
   const { rowCount } = await query(
     `DELETE FROM items WHERE id = $1 AND NOT EXISTS (SELECT 1 FROM claims WHERE item_id = $1)`,
-    [req.params.id]
+    [req.params.id],
   );
-  if (!rowCount) return res.status(409).json({ error: 'Someone has already claimed this item, so it cannot be deleted' });
+  if (!rowCount)
+    return res
+      .status(409)
+      .json({
+        error: "Someone has already claimed this item, so it cannot be deleted",
+      });
   res.status(204).end();
 }
 
 // Editing: only the finder, and only while nobody has claimed the item (security
 // checks claims against the questions, so they can't change under a claim).
-const NOT_YOURS = 'You can only edit your own posts';
-const LOCKED = 'Someone has already claimed this item, so it can no longer be edited';
+const NOT_YOURS = "You can only edit your own posts";
+const LOCKED =
+  "Someone has already claimed this item, so it can no longer be edited";
 
 // GET /items/:id/edit: the finder's own post with its private answers, to fill the edit form.
 export async function getItemForEdit(req, res) {
   if (!(await ownItem(req, res, NOT_YOURS))) return;
-  const { rows: [item] } = await query(
+  const {
+    rows: [item],
+  } = await query(
     `SELECT title, category, location, building, latitude, longitude,
             EXISTS (SELECT 1 FROM claims WHERE item_id = items.id) AS claimed,
             (SELECT json_agg(json_build_object('question', question, 'answer', expected_answer) ORDER BY id)
              FROM item_questions WHERE item_id = items.id) AS questions
      FROM items WHERE id = $1`,
-    [req.params.id]
+    [req.params.id],
   );
   if (item.claimed) return res.status(409).json({ error: LOCKED });
   const { claimed, ...post } = item; // eslint-disable-line no-unused-vars
@@ -197,7 +252,15 @@ export async function updateItem(req, res) {
   if (!(await ownItem(req, res, NOT_YOURS))) return;
   const { item, errors } = checkItem(req.body ?? {});
   if (Object.keys(errors).length) return formErrors(res, errors);
-  const { title, category, location, building, latitude, longitude, questions } = item;
+  const {
+    title,
+    category,
+    location,
+    building,
+    latitude,
+    longitude,
+    questions,
+  } = item;
   const { rows } = await query(
     `WITH item AS (
        UPDATE items SET title = $2, category = $3, location = $4, building = $5, latitude = $6, longitude = $7
@@ -210,8 +273,17 @@ export async function updateItem(req, res) {
        SELECT item.id, t.q, t.a FROM item, unnest($8::text[], $9::text[]) AS t(q, a)
      )
      SELECT * FROM item`,
-    [req.params.id, title, category, location, building, latitude, longitude,
-     questions.map((q) => q.question), questions.map((q) => q.answer)]
+    [
+      req.params.id,
+      title,
+      category,
+      location,
+      building,
+      latitude,
+      longitude,
+      questions.map((q) => q.question),
+      questions.map((q) => q.answer),
+    ],
   );
   if (!rows[0]) return res.status(409).json({ error: LOCKED });
   res.json(rows[0]);
@@ -220,14 +292,19 @@ export async function updateItem(req, res) {
 // POST /items/:id/received (security only): the finder handed a claimed item in at
 // the Campus Security desk, so it's marked 'dropped off'. Only once, only after a claim was approved.
 export async function markReceived(req, res) {
-  const { rows: [item] } = await query('SELECT status FROM items WHERE id = $1', [req.params.id]);
-  if (!item) return res.status(404).json({ error: 'Item not found' });
+  const {
+    rows: [item],
+  } = await query("SELECT status FROM items WHERE id = $1", [req.params.id]);
+  if (!item) return res.status(404).json({ error: "Item not found" });
   const { rows } = await query(
     `UPDATE items SET status = 'dropped off' WHERE id = $1 AND status = 'claimed' RETURNING ${PUBLIC_FIELDS}`,
-    [req.params.id]
+    [req.params.id],
   );
   if (!rows[0]) {
-    const error = item.status === 'dropped off' ? 'This item was already marked as received.' : "No claim on this item has been approved yet.";
+    const error =
+      item.status === "dropped off"
+        ? "This item was already marked as received."
+        : "No claim on this item has been approved yet.";
     return res.status(409).json({ error });
   }
   res.json(rows[0]);
@@ -244,9 +321,14 @@ export async function markHandedOff(req, res) {
      INSERT INTO handoffs (claim_id, staff_id)
      SELECT c.id, $2 FROM claims c JOIN item ON c.item_id = item.id WHERE c.status = 'approved'
      RETURNING completed_at AS "pickedUpAt"`,
-    [req.params.id, req.user.id]
+    [req.params.id, req.user.id],
   );
-  if (!rows[0]) return res.status(409).json({ error: "This item isn't waiting at the desk, or was already picked up." });
+  if (!rows[0])
+    return res
+      .status(409)
+      .json({
+        error: "This item isn't waiting at the desk, or was already picked up.",
+      });
   res.json(rows[0]);
 }
 
@@ -264,7 +346,7 @@ export async function listHistory(req, res) {
      LEFT JOIN users o ON o.id = c.claimant_id
      LEFT JOIN handoffs h ON h.claim_id = c.id
      LEFT JOIN users s ON s.id = h.staff_id
-     ORDER BY i.id DESC`
+     ORDER BY i.id DESC`,
   );
   res.json(rows);
 }

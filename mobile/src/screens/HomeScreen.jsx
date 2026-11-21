@@ -130,6 +130,13 @@ export default function HomeScreen({ navigation }) {
       setLoadingMore(false);
     }
   }
+  const clearFilters = () => {
+    setQuery("");
+    setCategory("All");
+    setLocation("");
+    setDateFrom("");
+    setDateTo("");
+  };
 
   // Pull-to-refresh handler.
   const onRefresh = async () => {
@@ -145,6 +152,14 @@ export default function HomeScreen({ navigation }) {
         <Text style={styles.brand}>Campus Claim</Text>
 
         <View style={styles.links}>
+          <Pressable
+            style={pressable}
+            onPress={() => navigation.navigate("Notifications")}
+            accessibilityRole="button"
+            accessibilityLabel="Notifications"
+          >
+            <Text style={ui.smallButtonText}>🕭</Text>
+          </Pressable>
           {user.role === "security" ? (
             <Pressable
               style={pressable}
@@ -154,13 +169,15 @@ export default function HomeScreen({ navigation }) {
               <Text style={ui.smallButtonText}>Review claims</Text>
             </Pressable>
           ) : null}
-          <Pressable
-            style={pressable}
-            onPress={() => navigation.navigate("MyListings")}
-            accessibilityRole="button"
-          >
-            <Text style={ui.smallButtonText}>My posts</Text>
-          </Pressable>
+          {user.role !== "guest" ? (
+            <Pressable
+              style={pressable}
+              onPress={() => navigation.navigate("MyListings")}
+              accessibilityRole="button"
+            >
+              <Text style={ui.smallButtonText}>My posts</Text>
+            </Pressable>
+          ) : null}
           <Pressable
             style={pressable}
             onPress={logout}
@@ -225,11 +242,15 @@ export default function HomeScreen({ navigation }) {
     );
   else
     empty = (
-      <Text style={[type.body, styles.center]}>
-        No items match. Try a different word or category.
-      </Text>
+      <View style={styles.center}>
+        <Text style={type.body}>
+          No items match. Try a different word or category.
+        </Text>
+        <Pressable onPress={clearFilters} style={styles.filterButton}>
+          <Text style={styles.filterButtonText}>Clear filters</Text>
+        </Pressable>
+      </View>
     );
-
   return (
     <SafeAreaView style={styles.screen} edges={["top"]}>
       <FlatList
@@ -260,7 +281,9 @@ export default function HomeScreen({ navigation }) {
         }
         keyboardShouldPersistTaps="handled"
       />
-      <PostButton onPress={() => navigation.navigate("PostItem")} />
+      {user.role !== "guest" ? (
+        <PostButton onPress={() => navigation.navigate("PostItem")} />
+      ) : null}
     </SafeAreaView>
   );
 }

@@ -16,3 +16,11 @@ export const requireRole = (role) => (req, res, next) => {
   if (req.user?.role !== role) return res.status(403).json({ error: 'Not allowed' });
   next();
 };
+
+// Guests can browse and claim items, but cannot manage posts.
+export function requireNonGuest(req, res, next) {
+  if (req.user?.role === 'guest') {
+    return res.status(403).json({ error: 'Guests cannot perform this action' });
+  }
+  next();
+}

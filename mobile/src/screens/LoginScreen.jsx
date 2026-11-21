@@ -1,7 +1,7 @@
 import { useContext, useState } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { AuthContext } from "../context/AuthContext";
-import { requestCode, verifyCode } from "../api/client";
+import { requestCode, verifyCode, guestLogin } from "../api/client";
 import { colors, spacing, type, ui } from "../theme";
 
 // Two-step login: enter student email -> enter the code emailed to it.
@@ -37,14 +37,26 @@ export default function LoginScreen() {
 
   const submitCode = () =>
     run(async () => {
-      const { token, user } = await verifyCode(email.trim().toLowerCase(), code, challenge);
+      const { token, user } = await verifyCode(
+        email.trim().toLowerCase(),
+        code,
+        challenge,
+      );
       login({ ...user, token }); // the app screens replace this one by themselves
     });
-
+  const continueAsGuest = () =>
+    run(async () => {
+      const { token, user } = await guestLogin();
+      login({ ...user, token });
+    });
   return (
     <View style={styles.screen}>
       <Text style={type.title}>Campus Claim</Text>
-      {expired && !codeSent ? <Text style={styles.expired}>Your session expired. Please log in again.</Text> : null}
+      {expired && !codeSent ? (
+        <Text style={styles.expired}>
+          Your session expired. Please log in again.
+        </Text>
+      ) : null}
       <Text style={styles.hint}>
         {codeSent
           ? `We emailed a 6-digit code to ${email.trim()}.`
@@ -87,8 +99,16 @@ export default function LoginScreen() {
         onPress={codeSent ? submitCode : sendCode}
         disabled={busy}
       >
-        <Text style={styles.buttonText}>{codeSent ? "Log in" : "Email me a code"}</Text>
+        <Text style={styles.buttonText}>
+          {codeSent ? "Log in" : "Email me a code"}
+        </Text>
       </Pressable>
+
+      {!codeSent ? (
+        <Pressable onPress={continueAsGuest} disabled={busy}>
+          <Text style={styles.link}>Continue as Guest</Text>
+        </Pressable>
+      ) : null}
 
       {codeSent ? (
         <Pressable
