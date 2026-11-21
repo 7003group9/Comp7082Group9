@@ -51,7 +51,7 @@ export default function SecurityDashboardScreen({ navigation }) {
     }
   }
 
-  if (loading) return <ActivityIndicator style={styles.center} color={colors.teal} />;
+  if (loading) return <ActivityIndicator style={styles.center} color={colors.accent} />;
 
   const button = (claim, decision, label, color) => {
     const armed = confirm === `${claim.id}:${decision}`;
@@ -116,18 +116,18 @@ export default function SecurityDashboardScreen({ navigation }) {
               {claim.itemStatus === 'dropped off' ? (
                 <>
                   <Text style={styles.approved}>At the desk. Waiting for the owner to pick it up.</Text>
-                  <View style={ui.actions}>{button(claim, 'handed', '✓ Picked up by owner', colors.teal)}</View>
+                  <View style={ui.actions}>{button(claim, 'handed', '✓ Picked up by owner', colors.accent)}</View>
                 </>
               ) : (
                 <>
                   <Text style={styles.approved}>Approved. Waiting for the finder to drop it off.</Text>
-                  <View style={ui.actions}>{button(claim, 'received', '✓ Received at the security desk', colors.teal)}</View>
+                  <View style={ui.actions}>{button(claim, 'received', '✓ Received at the security desk', colors.accent)}</View>
                 </>
               )}
             </>
           ) : (
             <View style={ui.actions}>
-              {button(claim, 'approved', 'Approve', colors.teal)}
+              {button(claim, 'approved', 'Approve', colors.accent)}
               {button(claim, 'rejected', 'Reject', colors.danger)}
             </View>
           )}
@@ -148,6 +148,6 @@ const styles = StyleSheet.create({
   qa: { marginTop: spacing.md, gap: 2 },
   question: { ...type.body, fontWeight: '600' },
   history: { marginBottom: spacing.md },
-  approved: { ...type.body, fontWeight: '600', color: colors.teal, marginTop: spacing.md },
-  details: { color: colors.teal, fontWeight: '600', marginTop: spacing.sm },
+  approved: { ...type.body, fontWeight: '600', color: colors.accent, marginTop: spacing.md },
+  details: { color: colors.accent, fontWeight: '600', marginTop: spacing.sm },
 });

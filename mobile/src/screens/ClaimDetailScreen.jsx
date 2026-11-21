@@ -99,7 +99,7 @@ export default function ClaimDetailScreen({ route }) {
       {error ? <Text style={styles.error}>{error}</Text> : null}
       {claim.status === 'pending' ? (
         <View style={[ui.actions, styles.actions]}>
-          {button('approved', 'Approve', colors.teal)}
+          {button('approved', 'Approve', colors.accent)}
           {button('rejected', 'Reject', colors.danger)}
         </View>
       ) : (
@@ -113,11 +113,11 @@ const styles = StyleSheet.create({
   scroll: { flex: 1, backgroundColor: colors.mist },
   screen: { padding: spacing.md, gap: 2 },
   section: { ...type.heading, fontSize: 16, marginTop: spacing.lg, marginBottom: spacing.xs },
-  link: { color: colors.teal, fontWeight: '600', marginTop: spacing.xs },
+  link: { color: colors.accent, fontWeight: '600', marginTop: spacing.xs },
   warn: { color: colors.danger, fontWeight: '600' },
   qa: { marginTop: spacing.md, gap: 2 },
   question: { ...type.body, fontWeight: '600' },
   error: { color: colors.danger, marginTop: spacing.md },
-  saved: { ...type.body, fontWeight: '600', color: colors.teal, marginTop: spacing.lg },
+  saved: { ...type.body, fontWeight: '600', color: colors.accent, marginTop: spacing.lg },
   actions: { marginTop: spacing.lg },
 });

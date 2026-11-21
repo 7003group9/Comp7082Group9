@@ -9,8 +9,6 @@ const MAX_TRIES = 5; // wrong guesses before the code is dead
 // The challenge is a random value handed only to whoever requested the code.
 // Guesses without it are ignored and don't count as tries, so a stranger who
 // only knows the email can't use up the real student's attempts.
-// ponytail: in memory, so codes are lost on restart and not shared between
-// servers. Move to a DB table if you run more than one server.
 const codes = new Map();
 
 const same = (a, b) => {

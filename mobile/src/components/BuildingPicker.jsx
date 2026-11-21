@@ -70,8 +70,8 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: colors.chipBorder,
   },
-  chipActive: { backgroundColor: colors.teal, borderColor: colors.teal },
+  chipActive: { backgroundColor: colors.accent, borderColor: colors.accent },
   label: { fontSize: 15, fontWeight: "600", color: colors.ink },
   labelActive: { color: colors.onAccent },
-  link: { color: colors.teal, fontWeight: "600" },
+  link: { color: colors.accent, fontWeight: "600" },
 });

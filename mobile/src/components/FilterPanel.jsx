@@ -75,7 +75,7 @@ const styles = StyleSheet.create({
   heading: {
     fontSize: 18,
     fontWeight: "700",
-    color: colors.teal,
+    color: colors.accent,
     marginBottom: spacing.sm,
   },
   label: {
@@ -102,7 +102,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.mist,
   },
   clearText: {
-    color: colors.teal,
+    color: colors.accent,
     fontWeight: "600",
   },
 });

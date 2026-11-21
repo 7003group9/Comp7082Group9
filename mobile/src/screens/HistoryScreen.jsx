@@ -13,7 +13,7 @@ export default function HistoryScreen() {
   const { user } = useContext(AuthContext);
   const { list: items, loading, error } = useFocusList(useCallback(() => fetchHistory(user.token), [user.token]));
 
-  if (loading) return <ActivityIndicator style={styles.center} color={colors.teal} />;
+  if (loading) return <ActivityIndicator style={styles.center} color={colors.accent} />;
 
   return (
     <FlatList

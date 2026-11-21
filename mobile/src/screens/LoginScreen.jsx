@@ -141,7 +141,7 @@ const styles = StyleSheet.create({
   disabled: ui.disabled,
   buttonText: ui.buttonText,
   link: {
-    color: colors.teal,
+    color: colors.accent,
     textAlign: "center",
     marginTop: spacing.md,
     fontWeight: "600",
