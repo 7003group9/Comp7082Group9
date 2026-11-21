@@ -4,6 +4,7 @@ import { useFocusEffect } from "@react-navigation/native";
 import {
   ActivityIndicator,
   FlatList,
+  Image,
   Pressable,
   RefreshControl,
   StyleSheet,
@@ -13,12 +14,18 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { fetchItems, fetchOptions } from "../api/client";
 import { AuthContext } from "../context/AuthContext";
-import CategoryChips from "../components/CategoryChips";
 import ItemCard from "../components/ItemCard";
 import PostButton from "../components/PostButton";
 import SearchBar from "../components/SearchBar";
 import FilterPanel from "../components/FilterPanel";
 import { colors, spacing, type, ui } from "../theme";
+
+// Filled bell (Material "notifications" icon) in the button text colour. The 🕭
+// character was too thin next to the text buttons. Built after theme.js has picked
+// the colours, so security users get theirs too.
+const bellIcon = `data:image/svg+xml,${encodeURIComponent(
+  `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="${colors.onAccent}"><path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.89 2 2 2zm6-6v-5c0-3.07-1.64-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.63 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z"/></svg>`,
+)}`;
 
 // Changes only after `value` has stopped changing for `ms`, so the server
 // isn't asked a question on every keystroke.
@@ -158,7 +165,7 @@ export default function HomeScreen({ navigation }) {
             accessibilityRole="button"
             accessibilityLabel="Notifications"
           >
-            <Text style={ui.smallButtonText}>🕭</Text>
+            <Image source={{ uri: bellIcon }} style={styles.bell} />
           </Pressable>
           {user.role === "security" ? (
             <Pressable
@@ -216,13 +223,7 @@ export default function HomeScreen({ navigation }) {
           setDateTo={setDateTo}
           buildings={buildings}
         />
-      ) : (
-        <CategoryChips
-          categories={categories}
-          selected={category}
-          onSelect={setCategory}
-        />
-      )}
+      ) : null}
       {/* A failed refresh while items are on screen: say so instead of failing silently. */}
       {error && items.length ? (
         <Text style={styles.banner}>{error}. Pull down to try again.</Text>
@@ -296,7 +297,7 @@ const styles = StyleSheet.create({
   list: { paddingHorizontal: spacing.md, paddingBottom: 120 },
   header: { paddingTop: spacing.md, paddingBottom: spacing.lg },
   brand: {
-    fontSize: 16,
+    fontSize: 22, // between body text (16) and the "Lost something?" title (30)
     fontWeight: "700",
     color: colors.accent,
   },
@@ -304,14 +305,16 @@ const styles = StyleSheet.create({
   center: { marginTop: spacing.xl, textAlign: "center", color: colors.slate },
   more: { marginVertical: spacing.md },
   banner: { color: colors.danger, marginTop: spacing.md },
+  // Title on its own line, buttons underneath, so they don't crowd each other.
   topRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
+    alignItems: "flex-start",
+    gap: spacing.sm,
     marginBottom: spacing.sm,
   },
 
-  links: { flexDirection: "row", gap: spacing.sm },
+  // Right-aligned under the title; wraps on narrow phones (still right-aligned).
+  links: { flexDirection: "row", flexWrap: "wrap", justifyContent: "flex-end", alignSelf: "stretch", gap: spacing.sm },
+  bell: { width: 18, height: 18 }, // about the height of the other buttons' text
   filterButton: {
     marginTop: spacing.md,
     padding: 12,
