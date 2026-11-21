@@ -233,7 +233,7 @@ export default function HomeScreen({ navigation }) {
   // What to show when the list has no rows: spinner, error, or no matches.
   let empty = null;
   if (loading)
-    empty = <ActivityIndicator style={styles.center} color={colors.teal} />;
+    empty = <ActivityIndicator style={styles.center} color={colors.accent} />;
   else if (error)
     empty = (
       <Text style={[type.body, styles.center]}>
@@ -266,7 +266,7 @@ export default function HomeScreen({ navigation }) {
         ListEmptyComponent={empty}
         ListFooterComponent={
           loadingMore ? (
-            <ActivityIndicator style={styles.more} color={colors.teal} />
+            <ActivityIndicator style={styles.more} color={colors.accent} />
           ) : null
         }
         onEndReached={loadMore}
@@ -276,7 +276,7 @@ export default function HomeScreen({ navigation }) {
           <RefreshControl
             refreshing={refreshing}
             onRefresh={onRefresh}
-            tintColor={colors.teal}
+            tintColor={colors.accent}
           />
         }
         keyboardShouldPersistTaps="handled"
@@ -298,7 +298,7 @@ const styles = StyleSheet.create({
   brand: {
     fontSize: 16,
     fontWeight: "700",
-    color: colors.teal,
+    color: colors.accent,
   },
   title: { ...type.title, marginBottom: spacing.xs },
   center: { marginTop: spacing.xl, textAlign: "center", color: colors.slate },
@@ -315,7 +315,7 @@ const styles = StyleSheet.create({
   filterButton: {
     marginTop: spacing.md,
     padding: 12,
-    backgroundColor: colors.teal,
+    backgroundColor: colors.accent,
     borderRadius: 8,
     alignItems: "center",
   },

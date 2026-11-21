@@ -33,7 +33,7 @@ export default function MyListingsScreen({ navigation }) {
     }
   }
 
-  if (loading) return <ActivityIndicator style={styles.center} color={colors.teal} />;
+  if (loading) return <ActivityIndicator style={styles.center} color={colors.accent} />;
 
   return (
     <FlatList
@@ -100,7 +100,7 @@ const styles = StyleSheet.create({
   card: { ...ui.card, flexDirection: "row", alignItems: "center", gap: spacing.md, padding: spacing.md, marginBottom: spacing.md },
   info: { flex: 1, gap: 2 },
   dropOff: { ...type.meta, color: colors.ink, fontWeight: "600", marginTop: spacing.sm },
-  edit: { color: colors.teal, fontWeight: "600" },
+  edit: { color: colors.accent, fontWeight: "600" },
   delete: { color: colors.danger, fontWeight: "600" },
   deleteConfirm: { fontWeight: "700", textDecorationLine: "underline" },
 });

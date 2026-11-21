@@ -1,9 +1,8 @@
 import { createContext, useEffect, useState } from "react";
 import { setSessionExpiredHandler } from "../api/client";
+import { USER_KEY, securityTheme } from "../theme";
 
 export const AuthContext = createContext(null);
-
-const USER_KEY = "campusclaim_user";
 
 // Reads the saved login. Anything missing, corrupted or blocked by the
 // browser counts as "not logged in" instead of crashing the app.
@@ -26,20 +25,25 @@ export function AuthProvider({ children }) {
     } catch {} // storage blocked: still logged in for this visit
     setExpired(false);
     setUser(userData);
+    // Colours are picked at startup (theme.js): reload so security gets theirs.
+    // Only if the login was saved, or the reload would log them straight out.
+    if (readSavedUser() && (userData.role === "security") !== securityTheme) location.reload();
   }
 
-  function logout() {
+  // reload=false keeps the page, e.g. to show the "session expired" note.
+  function logout(reload = true) {
     try {
       localStorage.removeItem(USER_KEY);
     } catch {}
     setUser(null);
+    if (reload && securityTheme) location.reload(); // back to the normal colours
   }
 
   // If any request comes back 401 (expired or invalid login), log out so the
   // app shows the login screen with a note, instead of a confusing error.
   useEffect(() => {
     setSessionExpiredHandler(() => {
-      logout();
+      logout(false);
       setExpired(true);
     });
   }, []);

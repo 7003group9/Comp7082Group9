@@ -72,7 +72,7 @@ export default function ItemDetailScreen({ route }) {
       ? statusBlock({ headline: 'Claimed', next: unavailable, color: colors.tagDone, text: colors.tagDoneText })
       : <Text style={[type.body, styles.section]}>{unavailable}</Text>;
   }
-  else if (!form) claimSection = <ActivityIndicator color={colors.teal} />;
+  else if (!form) claimSection = <ActivityIndicator color={colors.accent} />;
   else if (form.myClaim) {
     const stage = form.myClaim !== 'approved' ? form.myClaim
       : { 'dropped off': 'ready', 'handed off': 'collected' }[form.itemStatus] ?? 'approved';

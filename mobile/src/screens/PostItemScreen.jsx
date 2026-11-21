@@ -239,7 +239,7 @@ export default function PostItemScreen({ navigation, route }) {
   if (loading) {
     return (
       <View style={[styles.screen, styles.center]}>
-        <ActivityIndicator color={colors.teal} />
+        <ActivityIndicator color={colors.accent} />
       </View>
     );
   }
@@ -463,7 +463,7 @@ const styles = StyleSheet.create({
   detail: { marginTop: spacing.md },
   locate: { marginTop: 0, marginBottom: spacing.md }, // room for the error under it, like the inputs
   pinRow: { flexDirection: "row", alignItems: "center", gap: spacing.md },
-  pinText: { flexShrink: 1, color: colors.teal },
+  pinText: { flexShrink: 1, color: colors.accent },
   qa: { marginTop: spacing.md },
   intro: { marginTop: spacing.xs, marginBottom: spacing.lg },
   value: { ...type.body, marginBottom: spacing.lg },
@@ -489,14 +489,14 @@ const styles = StyleSheet.create({
   button: { ...ui.button, marginTop: spacing.md },
   secondary: {
     borderWidth: 2,
-    borderColor: colors.teal,
+    borderColor: colors.accent,
     padding: spacing.md,
     borderRadius: 8,
     alignItems: "center",
     marginTop: spacing.md,
   },
-  secondaryText: { fontSize: 16, fontWeight: "700", color: colors.teal },
+  secondaryText: { fontSize: 16, fontWeight: "700", color: colors.accent },
   disabled: ui.disabled,
   buttonText: ui.buttonText,
-  link: { color: colors.teal, fontWeight: "600" },
+  link: { color: colors.accent, fontWeight: "600" },
 });

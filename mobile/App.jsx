@@ -39,7 +39,7 @@ const navTheme = {
     background: colors.mist,
     card: colors.mist,
     text: colors.ink,
-    primary: colors.teal,
+    primary: colors.accent,
     border: colors.line,
   },
 };

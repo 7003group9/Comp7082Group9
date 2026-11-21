@@ -47,7 +47,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
   },
   button: {
-    backgroundColor: colors.teal,
+    backgroundColor: colors.accent,
     padding: spacing.md,
     borderRadius: 8,
     alignItems: "center",

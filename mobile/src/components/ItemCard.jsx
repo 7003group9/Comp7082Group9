@@ -60,6 +60,6 @@ const styles = StyleSheet.create({
     borderColor: colors.line,
   },
   stub: { width: 72, alignItems: 'center', justifyContent: 'center' },
-  ageValue: { fontSize: 20, fontWeight: '700', color: colors.teal },
+  ageValue: { fontSize: 20, fontWeight: '700', color: colors.accent },
   ageLabel: { fontSize: 13, color: colors.slate },
 });
