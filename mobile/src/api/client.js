@@ -1,6 +1,17 @@
 // Address of the server API; set VITE_API_URL in mobile/.env (see .env.example).
 const API_URL = import.meta.env.VITE_API_URL;
 
+// An item's photo as a local blob: URL for <Image source={{ uri }}>. Fetched with the
+// login token because the server only gives the finder and Campus Security the clear
+// photo (a plain <Image src> can't send the token). Revoke the URL when done; usePhoto does.
+export async function fetchPhotoUrl(itemId, token) {
+  const res = await fetch(`${API_URL}/items/${itemId}/photo`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (!res.ok) throw new Error(`Photo failed to load (${res.status})`);
+  return URL.createObjectURL(await res.blob());
+}
+
 // Called when the server rejects our login token (expired or invalid) so the
 // app can send the user back to the login screen. AuthProvider sets it.
 let onSessionExpired = () => {};

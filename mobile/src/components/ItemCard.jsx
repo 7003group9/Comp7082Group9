@@ -1,4 +1,5 @@
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { usePhoto } from '../hooks';
 import { colors, spacing, type, ui } from '../theme';
 import StatusLabel from './StatusLabel';
 
@@ -24,6 +25,7 @@ export const where = (item) => [item.building, item.location].filter(Boolean).jo
 // a torn-off stub with how long ago it was posted on the right.
 export default function ItemCard({ item, onPress }) {
   const [ageValue, ageLabel] = age(item.postedAt);
+  const photo = usePhoto(item.id, item.hasPhoto); // blurred by the server unless you may see it clearly
   return (
     <Pressable
       onPress={onPress}
@@ -31,6 +33,11 @@ export default function ItemCard({ item, onPress }) {
       accessibilityLabel={`${item.title}, found at ${where(item)}, ${postedAt(item.postedAt)}`}
       style={({ pressed }) => [styles.card, pressed && styles.pressed]}
     >
+      {/* Thumbnail when the post has a photo (only the home feed sends hasPhoto).
+          An empty square holds the space while it loads, so the card doesn't jump. */}
+      {item.hasPhoto ? (
+        photo ? <Image source={{ uri: photo }} style={styles.photo} accessibilityIgnoresInvertColors /> : <View style={styles.photo} />
+      ) : null}
       <View style={styles.main}>
         <Text style={styles.title}>{item.title}</Text>
         <Text style={type.meta}>{where(item)}</Text>
@@ -50,6 +57,8 @@ export default function ItemCard({ item, onPress }) {
 const styles = StyleSheet.create({
   card: { ...ui.card, flexDirection: 'row', marginBottom: spacing.md },
   pressed: { opacity: 0.85 },
+  // Square thumbnail on the left, kept off the card's edges by its margins.
+  photo: { width: 96, height: 96, borderRadius: 10, alignSelf: 'center', marginLeft: spacing.md, marginVertical: spacing.sm, backgroundColor: colors.mist },
   main: { flex: 1, padding: spacing.md, gap: 2 },
   title: { ...type.heading, marginBottom: 4 },
   tear: {

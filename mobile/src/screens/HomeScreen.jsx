@@ -247,9 +247,12 @@ export default function HomeScreen({ navigation }) {
         <Text style={type.body}>
           No items match. Try a different word or category.
         </Text>
-        <Pressable onPress={clearFilters} style={styles.filterButton}>
-          <Text style={styles.filterButtonText}>Clear filters</Text>
-        </Pressable>
+        {/* Only when there's something to clear, and not twice: the open panel has its own. */}
+        {!showFilters && (query || category !== "All" || location || dateFrom || dateTo) ? (
+          <Pressable onPress={clearFilters} style={styles.filterButton}>
+            <Text style={styles.filterButtonText}>Clear filters</Text>
+          </Pressable>
+        ) : null}
       </View>
     );
   return (
