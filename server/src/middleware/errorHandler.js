@@ -8,6 +8,11 @@ export const notFound = (req, res) => res.status(404).json({ error: 'Not found' 
 // eslint-disable-next-line no-unused-vars
 export const errorHandler = (err, req, res, next) => {
   console.error(err);
+  // A valid token for a user that no longer exists (e.g. after a database reset):
+  // saving anything with their id breaks the users foreign key. 401 makes the app log them out.
+  if (err.code === '23503' && err.detail?.includes('table "users"')) {
+    return res.status(401).json({ error: 'Your login is no longer valid. Please log in again.' });
+  }
   const status = err.status || 500;
   res.status(status).json({ error: status < 500 ? err.message : 'Something went wrong. Please try again.' });
 };

@@ -3,6 +3,7 @@ import { Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-na
 import { AuthContext } from '../context/AuthContext';
 import { decideClaim, fetchItem } from '../api/client';
 import { postedAt, where } from '../components/ItemCard';
+import ItemPhoto from '../components/ItemPhoto';
 import StatusLabel from '../components/StatusLabel';
 import { useConfirm } from '../hooks';
 import { colors, spacing, type, ui } from '../theme';
@@ -74,6 +75,9 @@ export default function ClaimDetailScreen({ route }) {
               <Text style={styles.link}>View on map</Text>
             </Pressable>
           ) : null}
+          {/* Clear for Campus Security, to compare with the answers. Items without a
+              photo get a 404, and ItemPhoto then shows nothing. */}
+          <ItemPhoto itemId={claim.itemId} title={claim.title} />
         </>
       ) : (
         <Text style={type.meta}>{item === false ? "Couldn't load the item's details." : 'Loading item details...'}</Text>

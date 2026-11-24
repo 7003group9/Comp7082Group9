@@ -27,7 +27,7 @@ export const where = (item) => [item.building, item.location].filter(Boolean).jo
 // a torn-off stub with how long ago it was posted on the right.
 export default function ItemCard({ item, onPress }) {
   const [ageValue, ageLabel] = age(item.postedAt);
-  const photo = usePhoto(item.id, item.hasPhoto); // blurred by the server unless you may see it clearly
+  const photo = usePhoto(item.id, item.hasPhoto, true); // small copy; blurred unless you may see it clearly
   const security = useContext(AuthContext).user?.role === 'security';
   return (
     <Pressable

@@ -4,8 +4,9 @@ const API_URL = import.meta.env.VITE_API_URL;
 // An item's photo as a local blob: URL for <Image source={{ uri }}>. Fetched with the
 // login token because the server only gives the finder and Campus Security the clear
 // photo (a plain <Image src> can't send the token). Revoke the URL when done; usePhoto does.
-export async function fetchPhotoUrl(itemId, token) {
-  const res = await fetch(`${API_URL}/items/${itemId}/photo`, {
+// thumb: a small copy for feed cards instead of the full-size original.
+export async function fetchPhotoUrl(itemId, token, thumb = false) {
+  const res = await fetch(`${API_URL}/items/${itemId}/photo${thumb ? '?size=thumb' : ''}`, {
     headers: token ? { Authorization: `Bearer ${token}` } : {},
   });
   if (!res.ok) throw new Error(`Photo failed to load (${res.status})`);

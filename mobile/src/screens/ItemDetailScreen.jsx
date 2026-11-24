@@ -1,8 +1,8 @@
 import { useContext, useEffect, useState } from 'react';
-import { ActivityIndicator, Image, Linking, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Linking, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { AuthContext } from '../context/AuthContext';
 import { fetchClaimForm, submitClaim } from '../api/client';
-import { usePhoto } from '../hooks';
+import ItemPhoto from '../components/ItemPhoto';
 import { colors, spacing, type, ui } from '../theme';
 import { where } from '../components/ItemCard';
 
@@ -28,15 +28,6 @@ export default function ItemDetailScreen({ route }) {
   const [answers, setAnswers] = useState({}); // { questionId: answer }
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
-  // Clear for Campus Security, blurred by the server for everyone else.
-  const photo = usePhoto(id, route.params.hasPhoto);
-  const [photoRatio, setPhotoRatio] = useState(null); // photo width / height, once known
-
-  // The photo's real shape, so it shows whole instead of cropped to a square.
-  useEffect(() => {
-    if (photo) Image.getSize(photo, (w, h) => setPhotoRatio(w / h), () => {});
-  }, [photo]);
-
   useEffect(() => {
     // Guests can look but not claim (the server refuses them too).
     if (user.role === 'guest') return setUnavailable('Log in with your school email to claim this item.');
@@ -130,10 +121,8 @@ export default function ItemDetailScreen({ route }) {
         </Pressable>
       ) : null}
 
-      {/* The finder's whole photo (never cropped), above the claim section. */}
-      {photo && photoRatio ? (
-        <Image source={{ uri: photo }} style={[styles.photo, { aspectRatio: photoRatio }]} accessibilityLabel={`Photo of ${title}`} />
-      ) : null}
+      {/* The finder's photo, above the claim section. */}
+      <ItemPhoto itemId={id} hasPhoto={route.params.hasPhoto} title={title} />
 
       {/* The heading only goes with the claim form; a claim status stands on its own. */}
       {form && !form.myClaim ? <Text style={[type.heading, styles.section]}>Is this yours?</Text> : null}
@@ -146,9 +135,6 @@ const styles = StyleSheet.create({
   scroll: { flex: 1, backgroundColor: colors.mist },
   screen: { flexGrow: 1, backgroundColor: colors.mist, padding: spacing.md, paddingBottom: spacing.xl },
   mapButton: { marginTop: spacing.sm },
-  // 80% wide and centred, with space either side. The height comes from the photo's
-  // own shape (aspectRatio, set inline), so it is never cropped.
-  photo: { width: '80%', alignSelf: 'center', borderRadius: 16, marginTop: spacing.lg },
   section: { marginTop: spacing.xl, marginBottom: spacing.sm },
   headline: {
     ...type.heading,
