@@ -6,15 +6,15 @@ import { AuthContext } from './context/AuthContext';
 
 // An item's photo as a uri for <Image>, or null while loading / if it has none.
 // The server decides clear or blurred from the login, so this sends the token.
-// The blob URL is freed when the component goes away.
-export function usePhoto(itemId, hasPhoto) {
+// The blob URL is freed when the component goes away. thumb: the small copy, for cards.
+export function usePhoto(itemId, hasPhoto, thumb = false) {
   const { user } = useContext(AuthContext);
   const [uri, setUri] = useState(null);
   useEffect(() => {
     if (!hasPhoto) return;
     let url = null;
     let cancelled = false;
-    fetchPhotoUrl(itemId, user?.token)
+    fetchPhotoUrl(itemId, user?.token, thumb)
       .then((u) => {
         if (cancelled) return URL.revokeObjectURL(u); // the screen closed while it loaded
         url = u;
@@ -25,7 +25,7 @@ export function usePhoto(itemId, hasPhoto) {
       cancelled = true;
       if (url) URL.revokeObjectURL(url);
     };
-  }, [itemId, hasPhoto, user?.token]);
+  }, [itemId, hasPhoto, user?.token, thumb]);
   return uri;
 }
 

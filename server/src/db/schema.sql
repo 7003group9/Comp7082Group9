@@ -27,12 +27,15 @@ CREATE TABLE IF NOT EXISTS item_questions (
   expected_answer TEXT NOT NULL
 );
 
--- The photo of a found item, saved with the post. (Viewing it is a later sprint.)
+-- The photo of a found item, saved with the post. The small versions are made once,
+-- at upload, so viewing a photo never has to process it.
 CREATE TABLE IF NOT EXISTS item_images (
   id        SERIAL PRIMARY KEY,
   item_id   INTEGER NOT NULL REFERENCES items(id) ON DELETE CASCADE,
-  mime_type TEXT NOT NULL,
-  data      BYTEA NOT NULL
+  mime_type TEXT NOT NULL,   -- of data (thumb and blurred are always WebP)
+  data      BYTEA NOT NULL,  -- the original, for the finder and Campus Security
+  thumb     BYTEA NOT NULL,  -- clear and small, for their feed cards
+  blurred   BYTEA NOT NULL   -- small and blurred, for everyone else
 );
 
 CREATE TABLE IF NOT EXISTS claims (

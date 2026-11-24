@@ -128,35 +128,56 @@ export async function getItem(req, res) {
   res.json(rows[0]);
 }
 
-// GET /items/:id/photo: the item's photo as an image. The finder and Campus Security
-// get it clear; everyone else gets a small blurred copy, so the photo can't give away
+// The two small copies of an uploaded photo, as WebP (keeps PNG transparency, smaller than JPEG).
+// rotate() first: phones store photos sideways with an "up is this way" tag that the
+// browser follows but the copies would lose, so the pixels are turned upright.
+// thumb: clear, 192px (sharp on the 96px feed card on high-res screens).
+// blurred: shrunk to 400px BEFORE blurring, so fine detail (stickers, writing) is gone
+// and the blur is equally strong whatever size the original was.
+const photoVersions = async (buffer) => {
+  const upright = sharp(buffer).rotate();
+  const [thumb, blurred] = await Promise.all([
+    upright.clone().resize(192, 192, { fit: "inside" }).webp({ quality: 80 }).toBuffer(),
+    upright.clone().resize(400, 400, { fit: "inside" }).blur(12).webp({ quality: 70 }).toBuffer(),
+  ]);
+  return { thumb, blurred };
+};
+
+// GET /items/:id/photo: the item's photo as an image. The finder, Campus Security and
+// the owner (once their claim is approved) get it clear; everyone else gets a small blurred copy, so the photo can't give away
 // answers to the private questions. Login is optional (Authorization header).
+// ?size=thumb gets the finder and Campus Security a small clear copy (for feed cards)
+// instead of the full original.
 export async function getPhoto(req, res) {
+  const viewer = userFrom(req);
+  // Only the chosen version is read from the database, so a thumbnail never loads the original.
   const { rows } = await query(
-    `SELECT p.mime_type, p.data, items.finder_id
-     FROM item_images p JOIN items ON items.id = p.item_id
-     WHERE p.item_id = $1 ORDER BY p.id LIMIT 1`,
-    [req.params.id],
+    `SELECT mime_type, original, clear,
+            CASE WHEN NOT clear THEN blurred WHEN original THEN data ELSE thumb END AS data
+     FROM (SELECT p.*, NOT $4 AS original,
+                  (items.finder_id = $2 OR $3 OR EXISTS (
+                     SELECT 1 FROM claims c
+                     WHERE c.item_id = items.id AND c.claimant_id = $2 AND c.status = 'approved'
+                   )) IS TRUE AS clear
+           FROM item_images p JOIN items ON items.id = p.item_id
+           WHERE p.item_id = $1 ORDER BY p.id LIMIT 1) photo`,
+    [req.params.id, viewer?.id ?? null, viewer?.role === "security", req.query.size === "thumb"],
   );
   const photo = rows[0];
   if (!photo) return res.status(404).json({ error: "No photo for this item" });
 
-  const viewer = userFrom(req);
-  const clear = viewer?.role === "security" || viewer?.id === photo.finder_id;
-  // Uploads only allow PHOTO_TYPES, but check again so a bad row can never be
-  // served as HTML/SVG.
-  let type = PHOTO_TYPES.includes(photo.mime_type) ? photo.mime_type : "application/octet-stream";
-  let data = photo.data;
-  if (!clear) {
-    // Shrinking first removes fine detail (stickers, writing) and keeps the blur strong
-    // whatever the original size. ponytail: re-blurred on every request; store the
-    // blurred copy at upload time if photo traffic grows.
-    data = await sharp(data).resize(400, 400, { fit: "inside" }).blur(12).jpeg({ quality: 70 }).toBuffer();
-    type = "image/jpeg";
+  // The made-at-upload versions are WebP. Uploads only allow PHOTO_TYPES, but check
+  // the original's type again so a bad row can never be served as HTML/SVG.
+  let type = "image/webp";
+  if (photo.clear && photo.original) {
+    type = PHOTO_TYPES.includes(photo.mime_type) ? photo.mime_type : "application/octet-stream";
   }
-  // The answer depends on who is asking, so only the viewer's own browser may cache it.
+  const { data } = photo;
+  // The answer depends on who is asking, so only the viewer's own browser may cache it,
+  // and it must check back each time (an approved claim switches blurred to clear).
+  // Express's ETag makes an unchanged photo a quick 304.
   res
-    .set({ "Cache-Control": "private, max-age=3600", Vary: "Authorization", "X-Content-Type-Options": "nosniff" })
+    .set({ "Cache-Control": "private, no-cache", Vary: "Authorization", "X-Content-Type-Options": "nosniff" })
     .type(type)
     .send(data);
 }
@@ -170,6 +191,16 @@ export async function createItem(req, res) {
   const photos = req.files ?? [];
   const { item, errors } = checkItem(req.body ?? {}, photos);
   if (Object.keys(errors).length) return formErrors(res, errors);
+
+  // The small versions, made once here so viewing never has to. Bytes that look like
+  // an image but can't be decoded get the same 400 as any other bad photo.
+  let versions;
+  try {
+    versions = await Promise.all(photos.map((p) => photoVersions(p.buffer)));
+  } catch {
+    const message = "That photo couldn't be read. Try a different one.";
+    return formErrors(res, { photos: message });
+  }
 
   // Each student can only have so many posts open at once (dropped off = done with it).
   const {
@@ -204,8 +235,9 @@ export async function createItem(req, res) {
        INSERT INTO item_questions (item_id, question, expected_answer)
        SELECT item.id, t.q, t.a FROM item, unnest($8::text[], $9::text[]) AS t(q, a)
      ), imgs AS (
-       INSERT INTO item_images (item_id, mime_type, data)
-       SELECT item.id, t.m, t.d FROM item, unnest($10::text[], $11::bytea[]) AS t(m, d)
+       INSERT INTO item_images (item_id, mime_type, data, thumb, blurred)
+       SELECT item.id, t.m, t.d, t.th, t.bl
+       FROM item, unnest($10::text[], $11::bytea[], $12::bytea[], $13::bytea[]) AS t(m, d, th, bl)
      )
      SELECT * FROM item`,
     [
@@ -220,6 +252,8 @@ export async function createItem(req, res) {
       questions.map((q) => q.answer),
       photos.map((p) => p.mimetype),
       photos.map((p) => p.buffer),
+      versions.map((v) => v.thumb),
+      versions.map((v) => v.blurred),
     ],
   );
   res.status(201).json(rows[0]);
