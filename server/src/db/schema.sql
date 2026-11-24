@@ -15,8 +15,7 @@ CREATE TABLE IF NOT EXISTS items (
   longitude           DOUBLE PRECISION CHECK (longitude BETWEEN -180 AND 180),
   status              TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'claim pending', 'claimed', 'dropped off', 'handed off')),  -- claimed = a claim was approved; dropped off = the finder left it at Campus Security
   created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),  -- when it was posted
-  claimed_at          TIMESTAMPTZ,                          -- when a claim was approved; the feed hides it 24h later
-  flagged_unclaimed   BOOLEAN NOT NULL DEFAULT FALSE
+  claimed_at          TIMESTAMPTZ                           -- when a claim was approved; the feed hides it 24h later
 );
 
 -- PRIVATE: expected_answer never leaves the server. Only the question text is

@@ -12,7 +12,9 @@ import {
 } from "../services/itemValidation.js";
 
 // Public fields ONLY. Private questions/answers are never selected here.
-const PUBLIC_FIELDS = `id, title, category, location, building, latitude, longitude, created_at AS "postedAt", status, flagged_unclaimed AS "flaggedUnclaimed"`;
+// flaggedUnclaimed: still unclaimed 30+ days after posting. Worked out on each read, so it's never stale.
+const PUBLIC_FIELDS = `id, title, category, location, building, latitude, longitude, created_at AS "postedAt", status,
+  (status IN ('open', 'claim pending') AND created_at <= NOW() - INTERVAL '30 days') AS "flaggedUnclaimed"`;
 
 const PAGE_SIZE = 20;
 
@@ -46,13 +48,6 @@ const likePattern = (s) => `%${s.replace(/[\\%_]/g, "\\$&")}%`;
 // myClaim is the viewer's own claim status on each item ('pending', 'approved',
 // 'rejected'), or null if they haven't claimed it or aren't logged in.
 export async function listItems(req, res) {
-  await query(`
-    UPDATE items
-    SET flagged_unclaimed = TRUE
-    WHERE created_at <= NOW() - INTERVAL '30 days'
-      AND status IN ('open', 'claim pending')
-      AND flagged_unclaimed = FALSE
-  `);
   const me = userFrom(req)?.id ?? null;
   const q = clean(req.query.q, 100);
   const category = clean(req.query.category, 50);
