@@ -1,12 +1,13 @@
 import { useContext, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { AuthContext } from "../context/AuthContext";
-import { createItem, deleteDraft, fetchDraft, fetchOptions, putDraft } from "../api/client";
+import { createItem, fetchItemForEdit, fetchOptions, updateItem } from "../api/client";
+import BuildingPicker from "../components/BuildingPicker";
 import CategoryChips from "../components/CategoryChips";
-import { colors, spacing, type } from "../theme";
+import { colors, spacing, type, ui } from "../theme";
 
 // Photo limits; the server checks the same ones.
-const MAX_PHOTOS = 3;
+const MAX_PHOTOS = 1;
 const MAX_PHOTO_MB = 5;
 const PHOTO_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
 const PLACEHOLDER = colors.placeholder;
@@ -14,18 +15,17 @@ const EMPTY_QA = { question: "", answer: "" };
 
 // How long to wait for a GPS fix, and how old a cached one may be.
 const GEO_OPTIONS = { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 };
-const pinLabel = (pin) => `GPS pin saved${pin.accuracy ? ` (within ${pin.accuracy} m)` : ""}`;
 
 // Message for when the device can't give a position. err.code is one of
 // err.PERMISSION_DENIED (1), err.POSITION_UNAVAILABLE (2) or err.TIMEOUT (3).
 function describeGeoError(err) {
   switch (err.code) {
     case 1:
-      return "Location is blocked for this site. You can allow it in your browser settings, or just describe the spot below.";
+      return "Location is blocked for this site. Allow it in your browser settings, then tap the button again.";
     case 3:
-      return "Finding your location took too long. Tap the button to try again, or describe the spot below.";
+      return "Finding your location took too long. Tap the button to try again.";
     default:
-      return "Your device couldn't find your location here. Describe the spot below instead.";
+      return "Your device couldn't find your location. Move somewhere with a better signal and try again.";
   }
 }
 
@@ -34,10 +34,11 @@ const isComplete = (q) => !!(q.question.trim() && q.answer.trim());
 const isPartial = (q) => !isComplete(q) && !!(q.question.trim() || q.answer.trim());
 
 // Same checks the server makes. Returns { field: message } for anything wrong;
-// the field names match the server's. The GPS pin is optional.
-function checkForm({ title, location, questions }) {
+// the field names match the server's. The GPS pin is required, the building optional.
+function checkForm({ title, location, pin, questions }) {
   const errors = {};
   if (!title.trim()) errors.title = "Say what the item is.";
+  if (!pin) errors.pin = 'Add a GPS pin with "Use my current location".';
   if (!location.trim()) errors.location = "Describe where you found it.";
   if (!questions.some(isComplete)) errors.questions = "Add at least one private question with its answer.";
   return errors;
@@ -48,10 +49,18 @@ function pickFiles(onPick) {
   const input = document.createElement("input");
   input.type = "file";
   input.accept = PHOTO_TYPES.join(",");
-  input.multiple = true;
+  input.multiple = false;
   input.onchange = () => onPick(Array.from(input.files ?? []));
   input.click();
 }
+
+// Field label; required adds the red *.
+const Label = ({ children, required, style }) => (
+  <Text style={[styles.label, style]}>
+    {children}
+    {required ? <Text style={styles.required} accessibilityLabel="required"> *</Text> : null}
+  </Text>
+);
 
 // Red message under a field; nothing when there is no error.
 const FieldError = ({ message }) => (message ? <Text style={styles.fieldError}>{message}</Text> : null);
@@ -82,29 +91,29 @@ function Thumbnails({ photos, onRemove }) {
 
 // Form for a finder to post a found item: public description, location,
 // category, photos, and private questions only the real owner could answer.
-export default function PostItemScreen({ navigation }) {
+// With route.params.editId it edits that post instead: the form is filled from
+// the server, photos can't be changed, and saving goes back to My posts.
+export default function PostItemScreen({ navigation, route }) {
+  const editId = route.params?.editId;
   const { user } = useContext(AuthContext);
-  const [loading, setLoading] = useState(true); // checking the server for a saved draft
+  const [loading, setLoading] = useState(!!editId); // editing: fetching the post
   const [title, setTitle] = useState("");
   const [location, setLocation] = useState(""); // the finder's description of the spot
-  const [pin, setPin] = useState(null); // { latitude, longitude, accuracy? } from the device, or null
+  const [pin, setPin] = useState(null); // { latitude, longitude } from the device, or null
+  const [building, setBuilding] = useState(""); // optional, one of options.buildings
   const [locating, setLocating] = useState(false); // waiting for the device's position
   const [category, setCategory] = useState("Other");
-  const [sensitive, setSensitive] = useState(false); // an ID, card, wallet or phone: kept off the public list
   // What the server offers. Until it answers (or if it can't), the form has no
-  // categories and room for just one question.
-  const [options, setOptions] = useState({ categories: [], maxQuestions: 1 });
+  // categories or buildings and room for just one question.
+  const [options, setOptions] = useState({ categories: [], buildings: [], maxQuestions: 1 });
   // Each question has the answer the owner must give to claim the item.
   const [questions, setQuestions] = useState([EMPTY_QA]);
   // Picked photos as { file, uri }; uri is a preview straight from the device.
   const [photos, setPhotos] = useState([]);
-  const [hasDraft, setHasDraft] = useState(false);
-  const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
   const [fieldErrors, setFieldErrors] = useState({}); // { field: message }
   const [busy, setBusy] = useState(false);
   const [reviewing, setReviewing] = useState(false); // showing the review step
-  const [result, setResult] = useState(null); // set after a successful post
 
   // The category choices and question limit come from the server, so the app and
   // server can never disagree about them.
@@ -114,28 +123,29 @@ export default function PostItemScreen({ navigation }) {
       .catch(() => {});
   }, []);
 
-  // Restore the draft saved on the server, if any. If it can't be loaded,
-  // start with an empty form; posting still works.
+  const [loadError, setLoadError] = useState(""); // editing: why the post couldn't be opened
+
+  // Editing: fill the form from the post (answers included).
   useEffect(() => {
+    if (!editId) return;
     let active = true;
-    fetchDraft(user.token)
-      .then((draft) => {
-        if (!active || !draft) return;
-        setTitle(draft.title ?? "");
-        setLocation(draft.location ?? "");
-        setPin(draft.latitude != null ? { latitude: draft.latitude, longitude: draft.longitude } : null);
-        setCategory(draft.category ?? "Other");
-        setSensitive(!!draft.sensitive);
-        setQuestions(draft.questions?.length ? draft.questions : [EMPTY_QA]);
-        setHasDraft(true);
-        setNotice("Your saved draft was restored.");
+    navigation.setOptions({ title: "Edit post" });
+    fetchItemForEdit(editId, user.token)
+      .then((post) => {
+        if (!active) return;
+        setTitle(post.title ?? "");
+        setLocation(post.location ?? "");
+        setPin(post.latitude != null ? { latitude: post.latitude, longitude: post.longitude } : null);
+        setBuilding(post.building ?? "");
+        setCategory(post.category ?? "Other");
+        setQuestions(post.questions?.length ? post.questions : [EMPTY_QA]);
       })
-      .catch(() => {})
+      .catch((err) => active && setLoadError(err.message)) // e.g. someone claimed it
       .finally(() => active && setLoading(false));
     return () => {
       active = false;
     };
-  }, [user.token]);
+  }, [user.token, editId, navigation]);
 
   // Free the photo previews when leaving the page.
   const photosRef = useRef(photos);
@@ -155,17 +165,17 @@ export default function PostItemScreen({ navigation }) {
   // Ask the device where it is. The browser asks the user for permission the first time.
   function locate() {
     if (!navigator.geolocation) {
-      return setFieldErrors((fe) => ({ ...fe, location: describeGeoError({ code: 2 }) }));
+      return setFieldErrors((fe) => ({ ...fe, pin: describeGeoError({ code: 2 }) }));
     }
     setLocating(true);
     navigator.geolocation.getCurrentPosition(
       ({ coords }) => {
-        setPin({ latitude: coords.latitude, longitude: coords.longitude, accuracy: Math.round(coords.accuracy) });
-        clearError("location");
+        setPin({ latitude: coords.latitude, longitude: coords.longitude });
+        clearError("pin");
         setLocating(false);
       },
       (err) => {
-        setFieldErrors((fe) => ({ ...fe, location: describeGeoError(err) }));
+        setFieldErrors((fe) => ({ ...fe, pin: describeGeoError(err) }));
         setLocating(false);
       },
       GEO_OPTIONS
@@ -177,7 +187,7 @@ export default function PostItemScreen({ navigation }) {
     const ok = files.filter((f) => PHOTO_TYPES.includes(f.type) && f.size <= MAX_PHOTO_MB * 1024 * 1024);
     const problems = [];
     if (ok.length < files.length) problems.push(`Photos must be JPEG, PNG, WebP or GIF and ${MAX_PHOTO_MB} MB or smaller.`);
-    if (ok.length > room) problems.push(`You can add up to ${MAX_PHOTOS} photos.`);
+    if (ok.length > room) problems.push("You can only add one photo.");
     setFieldErrors((fe) => ({ ...fe, photos: problems.join(" ") || undefined }));
     setPhotos((ps) => [...ps, ...ok.slice(0, room).map((file) => ({ file, uri: URL.createObjectURL(file) }))]);
   }
@@ -188,59 +198,10 @@ export default function PostItemScreen({ navigation }) {
     clearError("photos");
   }
 
-  // Keep what's typed so far on the server; it is restored next time this page opens.
-  async function saveDraft() {
-    setError("");
-    setNotice("");
-    setBusy(true);
-    try {
-      await putDraft(
-        { title, location, latitude: pin?.latitude, longitude: pin?.longitude, category, sensitive, questions },
-        user.token
-      );
-      setHasDraft(true);
-      setNotice(
-        photos.length
-          ? "Draft saved. Photos aren't saved in drafts, so add them again when you come back."
-          : "Draft saved. It will be here next time you open this page."
-      );
-    } catch (err) {
-      setError(`Could not save the draft: ${err.message}`);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function discardDraft() {
-    setError("");
-    setNotice("");
-    setBusy(true);
-    try {
-      await deleteDraft(user.token);
-    } catch (err) {
-      setError(`Could not discard the draft: ${err.message}`);
-      return;
-    } finally {
-      setBusy(false);
-    }
-    photos.forEach((p) => URL.revokeObjectURL(p.uri));
-    setTitle("");
-    setLocation("");
-    setPin(null);
-    setCategory("Other");
-    setSensitive(false);
-    setQuestions([EMPTY_QA]);
-    setPhotos([]);
-    setFieldErrors({});
-    setHasDraft(false);
-    setNotice("Draft discarded.");
-  }
-
   // Only shows the review step for a post the server will accept.
   function review() {
     setError("");
-    setNotice("");
-    const errors = checkForm({ title, location, questions });
+    const errors = checkForm({ title, location, pin, questions });
     setFieldErrors(errors);
     if (Object.keys(errors).length) return setError("Fix the fields marked above first.");
     setReviewing(true);
@@ -254,22 +215,15 @@ export default function PostItemScreen({ navigation }) {
   async function submit() {
     setError("");
     setBusy(true);
+    const post = { title, category, location, building, latitude: pin?.latitude, longitude: pin?.longitude, questions };
     try {
-      const posted = await createItem(
-        {
-          title,
-          category,
-          location,
-          latitude: pin?.latitude,
-          longitude: pin?.longitude,
-          sensitive,
-          questions,
-          photos: photos.map((p) => p.file),
-        },
-        user.token
-      );
-      deleteDraft(user.token).catch(() => {}); // posted, so the draft is no longer needed
-      setResult(posted);
+      if (editId) {
+        await updateItem(editId, post, user.token);
+        navigation.goBack(); // My posts reloads when it comes back into view
+        return;
+      }
+      await createItem({ ...post, photos: photos.map((p) => p.file) }, user.token);
+      navigation.replace("DropOff"); 
     } catch (err) {
       // The server said which fields are wrong: back to the form to show them there.
       if (err.fields) {
@@ -285,24 +239,15 @@ export default function PostItemScreen({ navigation }) {
   if (loading) {
     return (
       <View style={[styles.screen, styles.center]}>
-        <ActivityIndicator color={colors.teal} />
+        <ActivityIndicator color={colors.accent} />
       </View>
     );
   }
 
-  // After posting: confirmation instead of the form.
-  if (result) {
+  if (loadError) {
     return (
       <View style={styles.screen}>
-        <Text style={type.heading}>Thanks for posting!</Text>
-        <Text style={[type.body, styles.gap]}>
-          {result.routedToSecurity
-            ? "This is an ID, card, wallet or phone, so it won't be listed publicly. Please hand it in to Campus Security."
-            : `Your item is listed as No. ${result.id}.`}
-        </Text>
-        <Pressable style={styles.button} onPress={() => navigation.goBack()}>
-          <Text style={styles.buttonText}>Back to list</Text>
-        </Pressable>
+        <Text style={styles.error}>{loadError}</Text>
       </View>
     );
   }
@@ -321,24 +266,18 @@ export default function PostItemScreen({ navigation }) {
 
         <Text style={styles.label}>Where did you find it?</Text>
         <Text style={styles.value}>
+          {building ? `${building} · ` : ""}
           {location.trim()}
           {"\n"}
-          <Text style={type.meta}>{pin ? pinLabel(pin) : "No GPS pin"}</Text>
+          <Text style={type.meta}>GPS pin saved</Text>
         </Text>
 
         <Text style={styles.label}>Category</Text>
         <Text style={styles.value}>{category}</Text>
 
-        {sensitive ? (
-          <>
-            <Text style={styles.label}>Listing</Text>
-            <Text style={styles.value}>Not listed publicly. Hand it in to Campus Security.</Text>
-          </>
-        ) : null}
-
         {photos.length ? (
           <>
-            <Text style={styles.label}>Photos</Text>
+            <Text style={styles.label}>Photograph</Text>
             <View style={styles.reviewPhotos}>
               <Thumbnails photos={photos} />
             </View>
@@ -364,7 +303,7 @@ export default function PostItemScreen({ navigation }) {
         {error ? <Text style={styles.error}>{error}</Text> : null}
 
         <Pressable style={[styles.button, busy && styles.disabled]} onPress={submit} disabled={busy}>
-          <Text style={styles.buttonText}>{busy ? "Posting..." : "Submit"}</Text>
+          <Text style={styles.buttonText}>{busy ? "Saving..." : editId ? "Save changes" : "Submit"}</Text>
         </Pressable>
         <Pressable style={[styles.secondary, busy && styles.disabled]} onPress={edit} disabled={busy}>
           <Text style={styles.secondaryText}>Edit</Text>
@@ -375,7 +314,10 @@ export default function PostItemScreen({ navigation }) {
 
   return (
     <ScrollView style={styles.scroll} contentContainerStyle={styles.screen} keyboardShouldPersistTaps="handled">
-      <Text style={styles.label}>What is it?</Text>
+      <Text style={[type.meta, styles.requiredNote]}>
+        <Text style={styles.required}>*</Text> Required
+      </Text>
+      <Label required>What is it?</Label>
       <TextInput
         placeholderTextColor={PLACEHOLDER}
         style={[styles.input, fieldErrors.title && styles.inputError]}
@@ -387,23 +329,11 @@ export default function PostItemScreen({ navigation }) {
         }}
       />
       <FieldError message={fieldErrors.title} />
-      <Pressable
-        style={styles.checkRow}
-        onPress={() => setSensitive((s) => !s)}
-        accessibilityRole="checkbox"
-        accessibilityState={{ checked: sensitive }}
-      >
-        <View style={[styles.box, sensitive && styles.boxChecked]}>
-          {sensitive ? <Text style={styles.tick}>✓</Text> : null}
-        </View>
-        <Text style={[type.body, styles.checkLabel]}>This is an ID, card, wallet or phone</Text>
-      </Pressable>
-      {sensitive ? <Text style={[type.meta, styles.checkHint]}>It won't be listed publicly. Hand it in to Campus Security.</Text> : null}
 
-      <Text style={styles.label}>Where did you find it?</Text>
+      <Label required>Where did you find it?</Label>
       {pin ? (
         <View style={styles.pinRow}>
-          <Text style={[type.body, styles.pinText]}>✓ {pinLabel(pin)}</Text>
+          <Text style={[type.body, styles.pinText]}>✓ GPS pin saved</Text>
           <Pressable onPress={() => setPin(null)} accessibilityRole="button" accessibilityLabel="Remove GPS pin">
             <Text style={styles.link}>Remove</Text>
           </Pressable>
@@ -418,10 +348,28 @@ export default function PostItemScreen({ navigation }) {
           <Text style={styles.secondaryText}>{locating ? "Finding you..." : "📍 Use my current location"}</Text>
         </Pressable>
       )}
+      <FieldError message={fieldErrors.pin} />
+
+      <Label style={styles.detail}>Building</Label>
+      {options.buildings.length ? (
+        <BuildingPicker
+          buildings={options.buildings}
+          selected={building}
+          onSelect={(b) => {
+            setBuilding(b);
+            clearError("building");
+          }}
+        />
+      ) : (
+        <Text style={type.meta}>Couldn't load the buildings. You can still post without one.</Text>
+      )}
+      <FieldError message={fieldErrors.building} />
+
+      <Label required style={styles.detail}>Describe the location</Label>
       <TextInput
         placeholderTextColor={PLACEHOLDER}
-        style={[styles.input, styles.detail, fieldErrors.location && styles.inputError]}
-        placeholder="Describe the spot, e.g. SE12 2nd floor, by the vending machines"
+        style={[styles.input, fieldErrors.location && styles.inputError]}
+        placeholder="e.g. 2nd floor, by the vending machines"
         value={location}
         onChangeText={(v) => {
           setLocation(v);
@@ -430,7 +378,7 @@ export default function PostItemScreen({ navigation }) {
       />
       <FieldError message={fieldErrors.location} />
 
-      <Text style={styles.label}>Category</Text>
+      <Label>Category</Label>
       {options.categories.length ? (
         <CategoryChips
           categories={options.categories}
@@ -445,19 +393,23 @@ export default function PostItemScreen({ navigation }) {
       )}
       <FieldError message={fieldErrors.category} />
 
-      <Text style={[styles.label, styles.gap]}>Photos (optional)</Text>
-      <Text style={type.meta}>
-        Up to {MAX_PHOTOS}. Don't show anything that gives away your private answers, like a sticker or what's inside.
-      </Text>
-      <Thumbnails photos={photos} onRemove={removePhoto} />
-      {photos.length < MAX_PHOTOS ? (
-        <Pressable style={styles.addPhotos} onPress={() => pickFiles(addPhotos)}>
-          <Text style={styles.link}>+ Add photos</Text>
-        </Pressable>
-      ) : null}
-      <FieldError message={fieldErrors.photos} />
+      {editId ? null : (
+        <>
+          <Label style={styles.gap}>Photograph</Label>
+          <Text style={type.meta}>
+            Don't show anything that gives away your private answers, like a sticker or what's inside.
+          </Text>
+          <Thumbnails photos={photos} onRemove={removePhoto} />
+          {photos.length < MAX_PHOTOS ? (
+            <Pressable style={[styles.secondary, styles.addButton]} onPress={() => pickFiles(addPhotos)} accessibilityRole="button">
+              <Text style={styles.secondaryText}>+ Add photo</Text>
+            </Pressable>
+          ) : null}
+          <FieldError message={fieldErrors.photos} />
+        </>
+      )}
 
-      <Text style={[styles.label, styles.gap]}>Private questions</Text>
+      <Label required style={styles.gap}>Private questions</Label>
       <Text style={type.meta}>
         Only the real owner should know the answer (a sticker, what's inside, a scratch). These are never shown publicly.
       </Text>
@@ -479,25 +431,20 @@ export default function PostItemScreen({ navigation }) {
       ))}
       <FieldError message={fieldErrors.questions} />
       {questions.length < options.maxQuestions ? (
-        <Pressable onPress={() => setQuestions((qs) => [...qs, EMPTY_QA])}>
-          <Text style={styles.link}>+ Add another question</Text>
+        <Pressable
+          style={[styles.secondary, styles.addButton]}
+          onPress={() => setQuestions((qs) => [...qs, EMPTY_QA])}
+          accessibilityRole="button"
+        >
+          <Text style={styles.secondaryText}>+ Add another question</Text>
         </Pressable>
       ) : null}
 
       {error ? <Text style={styles.error}>{error}</Text> : null}
-      {notice ? <Text style={styles.notice}>{notice}</Text> : null}
 
       <Pressable style={[styles.button, busy && styles.disabled]} onPress={review} disabled={busy}>
-        <Text style={styles.buttonText}>Review post</Text>
+        <Text style={styles.buttonText}>{editId ? "Review changes" : "Post lost item"}</Text>
       </Pressable>
-      <Pressable style={[styles.secondary, busy && styles.disabled]} onPress={saveDraft} disabled={busy}>
-        <Text style={styles.secondaryText}>Save draft</Text>
-      </Pressable>
-      {hasDraft ? (
-        <Pressable onPress={discardDraft} disabled={busy}>
-          <Text style={[styles.link, styles.discard]}>Discard draft</Text>
-        </Pressable>
-      ) : null}
     </ScrollView>
   );
 }
@@ -508,43 +455,21 @@ const styles = StyleSheet.create({
   center: { alignItems: "center", justifyContent: "center" },
   gap: { marginTop: spacing.lg, marginBottom: spacing.md },
   label: { ...type.body, fontWeight: "600", marginBottom: spacing.xs },
-  input: {
-    backgroundColor: colors.paper,
-    borderWidth: 1,
-    borderColor: colors.slate,
-    borderRadius: 8,
-    padding: spacing.md,
-    marginBottom: spacing.md,
-    fontSize: 16,
-    color: colors.ink,
-  },
-  inputError: { borderColor: "#B00020" },
-  checkRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm, marginBottom: spacing.md },
-  box: {
-    width: 22,
-    height: 22,
-    borderRadius: 4,
-    borderWidth: 2,
-    borderColor: colors.ink,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: colors.paper,
-  },
-  boxChecked: { backgroundColor: colors.ink },
-  tick: { color: colors.paper, fontSize: 14, fontWeight: "700", lineHeight: 16 },
-  checkLabel: { flexShrink: 1 },
-  checkHint: { marginTop: -spacing.sm, marginBottom: spacing.md },
-  fieldError: { color: "#B00020", marginTop: -spacing.sm, marginBottom: spacing.md },
+  input: { ...ui.input, marginBottom: spacing.md },
+  inputError: { borderColor: colors.danger },
+  required: { color: colors.danger }, // the red * on required fields
+  requiredNote: { marginBottom: spacing.md },
+  fieldError: { color: colors.danger, marginTop: -spacing.sm, marginBottom: spacing.md },
   detail: { marginTop: spacing.md },
-  locate: { marginTop: 0 },
+  locate: { marginTop: 0, marginBottom: spacing.md }, // room for the error under it, like the inputs
   pinRow: { flexDirection: "row", alignItems: "center", gap: spacing.md },
-  pinText: { flexShrink: 1, color: colors.teal },
+  pinText: { flexShrink: 1, color: colors.accent },
   qa: { marginTop: spacing.md },
   intro: { marginTop: spacing.xs, marginBottom: spacing.lg },
   value: { ...type.body, marginBottom: spacing.lg },
   qaReview: { marginTop: spacing.md },
   reviewPhotos: { marginTop: -spacing.md, marginBottom: spacing.lg },
-  warning: { color: "#8A5A00", marginTop: spacing.md },
+  warning: { color: colors.warning, marginTop: spacing.md },
   thumbs: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm, marginTop: spacing.md },
   thumb: { width: 88, height: 88, borderRadius: 8, backgroundColor: colors.line },
   remove: {
@@ -559,27 +484,19 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   removeText: { color: colors.paper, fontSize: 16, fontWeight: "700", lineHeight: 18 },
-  addPhotos: { marginTop: spacing.md, marginBottom: spacing.md },
-  error: { color: "#B00020", marginVertical: spacing.md },
-  button: {
-    backgroundColor: colors.teal,
-    padding: spacing.md,
-    borderRadius: 8,
-    alignItems: "center",
-    marginTop: spacing.md,
-  },
+  addButton: { marginTop: spacing.md, marginBottom: spacing.md },
+  error: { color: colors.danger, marginVertical: spacing.md },
+  button: { ...ui.button, marginTop: spacing.md },
   secondary: {
     borderWidth: 2,
-    borderColor: colors.teal,
+    borderColor: colors.accent,
     padding: spacing.md,
     borderRadius: 8,
     alignItems: "center",
     marginTop: spacing.md,
   },
-  secondaryText: { fontSize: 16, fontWeight: "700", color: colors.teal },
-  notice: { color: colors.teal, marginTop: spacing.md },
-  discard: { marginTop: spacing.md, color: "#B00020" },
-  disabled: { opacity: 0.6 },
-  buttonText: { fontSize: 16, fontWeight: "700", color: colors.paper },
-  link: { color: colors.teal, fontWeight: "600" },
+  secondaryText: { fontSize: 16, fontWeight: "700", color: colors.accent },
+  disabled: ui.disabled,
+  buttonText: ui.buttonText,
+  link: { color: colors.accent, fontWeight: "600" },
 });

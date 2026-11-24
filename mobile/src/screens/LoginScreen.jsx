@@ -1,8 +1,8 @@
 import { useContext, useState } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { AuthContext } from "../context/AuthContext";
-import { requestCode, verifyCode } from "../api/client";
-import { colors, spacing, type } from "../theme";
+import { requestCode, verifyCode, guestLogin } from "../api/client";
+import { colors, spacing, type, ui } from "../theme";
 
 // Two-step login: enter student email -> enter the code emailed to it.
 export default function LoginScreen() {
@@ -37,14 +37,26 @@ export default function LoginScreen() {
 
   const submitCode = () =>
     run(async () => {
-      const { token, user } = await verifyCode(email.trim().toLowerCase(), code, challenge);
+      const { token, user } = await verifyCode(
+        email.trim().toLowerCase(),
+        code,
+        challenge,
+      );
       login({ ...user, token }); // the app screens replace this one by themselves
     });
-
+  const continueAsGuest = () =>
+    run(async () => {
+      const { token, user } = await guestLogin();
+      login({ ...user, token });
+    });
   return (
     <View style={styles.screen}>
       <Text style={type.title}>Campus Claim</Text>
-      {expired && !codeSent ? <Text style={styles.expired}>Your session expired. Please log in again.</Text> : null}
+      {expired && !codeSent ? (
+        <Text style={styles.expired}>
+          Your session expired. Please log in again.
+        </Text>
+      ) : null}
       <Text style={styles.hint}>
         {codeSent
           ? `We emailed a 6-digit code to ${email.trim()}.`
@@ -87,8 +99,16 @@ export default function LoginScreen() {
         onPress={codeSent ? submitCode : sendCode}
         disabled={busy}
       >
-        <Text style={styles.buttonText}>{codeSent ? "Log in" : "Email me a code"}</Text>
+        <Text style={styles.buttonText}>
+          {codeSent ? "Log in" : "Email me a code"}
+        </Text>
       </Pressable>
+
+      {!codeSent ? (
+        <Pressable onPress={continueAsGuest} disabled={busy}>
+          <Text style={styles.link}>Continue as Guest</Text>
+        </Pressable>
+      ) : null}
 
       {codeSent ? (
         <Pressable
@@ -112,30 +132,16 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     justifyContent: "center",
   },
-  expired: { color: "#B00020", marginTop: spacing.sm },
+  expired: { color: colors.danger, marginTop: spacing.sm },
   hint: { ...type.meta, marginTop: spacing.sm, marginBottom: spacing.lg },
   label: { ...type.body, fontWeight: "600", marginBottom: spacing.xs },
-  input: {
-    backgroundColor: colors.paper,
-    borderWidth: 1,
-    borderColor: colors.slate,
-    borderRadius: 8,
-    padding: spacing.md,
-    marginBottom: spacing.md,
-    fontSize: 16,
-    color: colors.ink,
-  },
-  error: { color: "#B00020", marginBottom: spacing.md },
-  button: {
-    backgroundColor: colors.teal,
-    padding: spacing.md,
-    borderRadius: 8,
-    alignItems: "center",
-  },
-  disabled: { opacity: 0.6 },
-  buttonText: { fontSize: 16, fontWeight: "700", color: colors.paper },
+  input: { ...ui.input, marginBottom: spacing.md },
+  error: { color: colors.danger, marginBottom: spacing.md },
+  button: ui.button,
+  disabled: ui.disabled,
+  buttonText: ui.buttonText,
   link: {
-    color: colors.teal,
+    color: colors.accent,
     textAlign: "center",
     marginTop: spacing.md,
     fontWeight: "600",
