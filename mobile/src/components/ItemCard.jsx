@@ -1,4 +1,6 @@
+import { useContext } from 'react';
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { AuthContext } from '../context/AuthContext';
 import { usePhoto } from '../hooks';
 import { colors, spacing, type, ui } from '../theme';
 import StatusLabel from './StatusLabel';
@@ -26,6 +28,7 @@ export const where = (item) => [item.building, item.location].filter(Boolean).jo
 export default function ItemCard({ item, onPress }) {
   const [ageValue, ageLabel] = age(item.postedAt);
   const photo = usePhoto(item.id, item.hasPhoto); // blurred by the server unless you may see it clearly
+  const security = useContext(AuthContext).user?.role === 'security';
   return (
     <Pressable
       onPress={onPress}
@@ -41,8 +44,11 @@ export default function ItemCard({ item, onPress }) {
       <View style={styles.main}>
         <Text style={styles.title}>{item.title}</Text>
         <Text style={type.meta}>{where(item)}</Text>
-        {/* Open items need no label on the feed, unless your claim on it was turned down. */}
-        {item.status !== 'open' || item.myClaim === 'rejected' ? <StatusLabel item={item} /> : null}
+        {/* Open items need no label on the feed, unless your claim on it was turned down,
+            or (for Campus Security) it has sat unclaimed for 30+ days. */}
+        {item.status !== 'open' || item.myClaim === 'rejected' || (security && item.flaggedUnclaimed) ? (
+          <StatusLabel item={item} />
+        ) : null}
       </View>
       {/* Dashed divider between the details and the stub. */}
       <View style={styles.tear} />
