@@ -1,3 +1,4 @@
+import sharp from "sharp";
 import { query } from "../config/db.js";
 import { userFrom } from "../middleware/auth.js";
 import {
@@ -5,12 +6,15 @@ import {
   CATEGORIES,
   MAX_OPEN_POSTS,
   MAX_QUESTIONS,
+  PHOTO_TYPES,
   checkItem,
   clean,
 } from "../services/itemValidation.js";
 
 // Public fields ONLY. Private questions/answers are never selected here.
-const PUBLIC_FIELDS = `id, title, category, location, building, latitude, longitude, created_at AS "postedAt", status, flagged_unclaimed AS "flaggedUnclaimed"`;
+// flaggedUnclaimed: still unclaimed 30+ days after posting. Worked out on each read, so it's never stale.
+const PUBLIC_FIELDS = `id, title, category, location, building, latitude, longitude, created_at AS "postedAt", status,
+  (status IN ('open', 'claim pending') AND created_at <= NOW() - INTERVAL '30 days') AS "flaggedUnclaimed"`;
 
 const PAGE_SIZE = 20;
 
@@ -44,13 +48,6 @@ const likePattern = (s) => `%${s.replace(/[\\%_]/g, "\\$&")}%`;
 // myClaim is the viewer's own claim status on each item ('pending', 'approved',
 // 'rejected'), or null if they haven't claimed it or aren't logged in.
 export async function listItems(req, res) {
-  await query(`
-    UPDATE items
-    SET flagged_unclaimed = TRUE
-    WHERE created_at <= NOW() - INTERVAL '30 days'
-      AND status IN ('open', 'claim pending')
-      AND flagged_unclaimed = FALSE
-  `);
   const me = userFrom(req)?.id ?? null;
   const q = clean(req.query.q, 100);
   const category = clean(req.query.category, 50);
@@ -81,7 +78,8 @@ export async function listItems(req, res) {
 
   const { rows } = await query(
     `SELECT ${PUBLIC_FIELDS},
-            (SELECT c.status FROM claims c WHERE c.item_id = items.id AND c.claimant_id = $7) AS "myClaim"
+            (SELECT c.status FROM claims c WHERE c.item_id = items.id AND c.claimant_id = $7) AS "myClaim",
+            EXISTS (SELECT 1 FROM item_images i WHERE i.item_id = items.id) AS "hasPhoto"
      FROM items
      WHERE (status IN ('open', 'claim pending')
             OR (status IN ('claimed', 'dropped off') AND claimed_at > now() - interval '24 hours')
@@ -128,6 +126,39 @@ export async function getItem(req, res) {
   );
   if (!rows[0]) return res.status(404).json({ error: "Item not found" });
   res.json(rows[0]);
+}
+
+// GET /items/:id/photo: the item's photo as an image. The finder and Campus Security
+// get it clear; everyone else gets a small blurred copy, so the photo can't give away
+// answers to the private questions. Login is optional (Authorization header).
+export async function getPhoto(req, res) {
+  const { rows } = await query(
+    `SELECT p.mime_type, p.data, items.finder_id
+     FROM item_images p JOIN items ON items.id = p.item_id
+     WHERE p.item_id = $1 ORDER BY p.id LIMIT 1`,
+    [req.params.id],
+  );
+  const photo = rows[0];
+  if (!photo) return res.status(404).json({ error: "No photo for this item" });
+
+  const viewer = userFrom(req);
+  const clear = viewer?.role === "security" || viewer?.id === photo.finder_id;
+  // Uploads only allow PHOTO_TYPES, but check again so a bad row can never be
+  // served as HTML/SVG.
+  let type = PHOTO_TYPES.includes(photo.mime_type) ? photo.mime_type : "application/octet-stream";
+  let data = photo.data;
+  if (!clear) {
+    // Shrinking first removes fine detail (stickers, writing) and keeps the blur strong
+    // whatever the original size. ponytail: re-blurred on every request; store the
+    // blurred copy at upload time if photo traffic grows.
+    data = await sharp(data).resize(400, 400, { fit: "inside" }).blur(12).jpeg({ quality: 70 }).toBuffer();
+    type = "image/jpeg";
+  }
+  // The answer depends on who is asking, so only the viewer's own browser may cache it.
+  res
+    .set({ "Cache-Control": "private, max-age=3600", Vary: "Authorization", "X-Content-Type-Options": "nosniff" })
+    .type(type)
+    .send(data);
 }
 
 // POST /items  { title, category, location, building?, latitude, longitude, questions: [{ question, answer }] }

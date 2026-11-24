@@ -4,6 +4,7 @@ import {
   listItems,
   getFormOptions,
   getItem,
+  getPhoto,
   getItemForEdit,
   createItem,
   updateItem,
@@ -35,7 +36,8 @@ router.get("/options", getFormOptions);
 router.get("/history", requireAuth, requireRole("security"), listHistory);
 router.get("/mine", requireAuth, requireNonGuest, listMine);
 router.get("/:id", getItem);
-router.get("/:id/questions", requireAuth, claimForm);
+router.get("/:id/photo", getPhoto);
+router.get("/:id/questions", requireAuth, requireNonGuest, claimForm);
 router.get("/:id/edit", requireAuth, requireNonGuest, getItemForEdit);
 router.post("/", requireAuth, requireNonGuest, photos, createItem);
 router.put("/:id", requireAuth, requireNonGuest, updateItem);

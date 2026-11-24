@@ -18,7 +18,8 @@ function forItem(item, mine) {
   if (item.myClaim === 'rejected') return ["Your claim wasn't approved", 'rejected'];
   switch (item.status) {
     case 'open':
-      return ['Unclaimed', 'unclaimed'];
+      // Nobody has claimed it in 30 days: time for Campus Security to deal with it.
+      return item.flaggedUnclaimed ? ['Unclaimed 30+ days', 'rejected'] : ['Unclaimed', 'unclaimed'];
     case 'claim pending':
       return ['Claim pending', 'pending'];
     case 'claimed':
