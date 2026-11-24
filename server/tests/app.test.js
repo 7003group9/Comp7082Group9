@@ -247,6 +247,82 @@ test('form options are public and match what posts accept', () =>
     assert.deepEqual(await res.json(), { categories: CATEGORIES, buildings: BUILDINGS, maxQuestions: MAX_QUESTIONS });
   }));
 
+test('unknown routes return consistent JSON 404s', () =>
+  withServer(async (base) => {
+    const res = await fetch(`${base}/does-not-exist`);
+    assert.equal(res.status, 404);
+    assert.deepEqual(await res.json(), { error: 'Not found', code: 'NOT_FOUND' });
+  }));
+
+test('malformed JSON returns a clean 400 payload', () =>
+  withServer(async (base) => {
+    const res = await fetch(`${base}/health`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{"broken"',
+    });
+    assert.equal(res.status, 400);
+    const payload = await res.json();
+    assert.equal(payload.error, 'Invalid JSON request body');
+    assert.equal(payload.code, 'INVALID_JSON');
+  }));
+
+test('global error handler maps operational and database errors', () => {
+  const invoke = (err) => {
+    let out;
+    const res = {
+      status(code) {
+        return {
+          json(body) {
+            out = { code, body };
+          },
+        };
+      },
+    };
+    const log = console.error;
+    console.error = () => {};
+    errorHandler(err, { method: 'GET', originalUrl: '/test' }, res, () => {});
+    console.error = log;
+    return out;
+  };
+
+  assert.deepEqual(invoke(Object.assign(new Error('Already submitted'), { status: 409 })).body,
+    { error: 'Already submitted', code: 'HTTP_409' });
+  assert.deepEqual(invoke(Object.assign(new Error('raw duplicate detail'), { code: '23505' })).body,
+    { error: 'This record already exists', code: 'DB_23505' });
+  assert.deepEqual(invoke(Object.assign(new Error('raw foreign key detail'), { code: '23503' })).body,
+    { error: 'This record is referenced by another record', code: 'DB_23503' });
+  assert.deepEqual(invoke(Object.assign(new Error("invalid input syntax for integer"), { code: '22P02' })).body,
+    { error: 'Invalid value provided', code: 'DB_22P02' });
+});
+
+test('unexpected errors return safe 500 JSON without stack traces', () => {
+  let out;
+  const res = {
+    status(code) {
+      return {
+        json(body) {
+          out = { code, body };
+        },
+      };
+    },
+  };
+  const err = new Error('postgresql://secret-user:secret@internal-host/database');
+  err.stack = 'sensitive stack trace';
+  const log = console.error;
+  console.error = () => {};
+  errorHandler(err, { method: 'GET', originalUrl: '/test' }, res, () => {});
+  console.error = log;
+
+  assert.equal(out.code, 500);
+  assert.deepEqual(out.body, {
+    error: 'Something went wrong. Please try again.',
+    code: 'INTERNAL_SERVER_ERROR',
+  });
+  assert.ok(!JSON.stringify(out.body).includes('secret'));
+  assert.ok(!JSON.stringify(out.body).includes('stack trace'));
+});
+
 test('server errors never show internal details to the user', () => {
   const reply = (err) => {
     let out;
