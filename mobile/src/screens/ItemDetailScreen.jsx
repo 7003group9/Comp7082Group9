@@ -1,7 +1,7 @@
 import { useContext, useEffect, useState } from 'react';
-import { ActivityIndicator, Linking, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Linking, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { AuthContext } from '../context/AuthContext';
-import { fetchClaimForm, submitClaim } from '../api/client';
+import { fetchClaimForm, reportItem, submitClaim } from '../api/client';
 import { colors, spacing, type, ui } from '../theme';
 import { where } from '../components/ItemCard';
 
@@ -27,6 +27,28 @@ export default function ItemDetailScreen({ route }) {
   const [answers, setAnswers] = useState({}); // { questionId: answer }
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [reportOpen, setReportOpen] = useState(false);
+  const [reportReason, setReportReason] = useState('');
+  const [reportDetails, setReportDetails] = useState('');
+  const [reportBusy, setReportBusy] = useState(false);
+  const [reportMessage, setReportMessage] = useState('');
+  const reportReasons = ['Spam', 'Inappropriate content', 'Prohibited item', 'Scam or fraud', 'Incorrect or misleading information', 'Other'];
+
+  async function submitReport() {
+    if (!reportReason) return setReportMessage('Choose a reason for your report.');
+    setReportBusy(true);
+    setReportMessage('');
+    try {
+      await reportItem(id, reportReason, reportDetails, user.token);
+      setReportOpen(false);
+      setReportDetails('');
+      setReportMessage('Report submitted. Campus Security will review it.');
+    } catch (err) {
+      setReportMessage(err.message);
+    } finally {
+      setReportBusy(false);
+    }
+  }
 
   useEffect(() => {
     let active = true;
@@ -122,6 +144,61 @@ export default function ItemDetailScreen({ route }) {
       {/* The heading only goes with the claim form; a claim status stands on its own. */}
       {form && !form.myClaim ? <Text style={[type.heading, styles.section]}>Is this yours?</Text> : null}
       {claimSection}
+
+      {['open', 'claim pending'].includes(route.params.status) ? (
+        <View style={styles.reportArea}>
+          {reportMessage ? <Text style={reportMessage.includes('submitted') ? styles.confirmation : styles.error}>{reportMessage}</Text> : null}
+          <Pressable
+            style={[styles.reportButton, reportBusy && ui.disabled]}
+            onPress={() => setReportOpen(true)}
+            accessibilityRole="button"
+          >
+            <Text style={styles.reportButtonText}>Report this post</Text>
+          </Pressable>
+        </View>
+      ) : null}
+
+      <Modal visible={reportOpen} transparent animationType="fade" onRequestClose={() => setReportOpen(false)}>
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <Text style={type.heading}>Report this post</Text>
+            <Text style={[type.meta, styles.modalHint]}>Tell Campus Security why this post should be reviewed.</Text>
+            {reportReasons.map((reason) => (
+              <Pressable
+                key={reason}
+                style={[styles.reason, reportReason === reason && styles.reasonSelected]}
+                onPress={() => {
+                  setReportReason(reason);
+                  setReportMessage('');
+                }}
+                accessibilityRole="radio"
+                accessibilityState={{ selected: reportReason === reason }}
+              >
+                <Text style={[type.body, reportReason === reason && styles.reasonTextSelected]}>{reason}</Text>
+              </Pressable>
+            ))}
+            <Text style={[styles.label, styles.detailsLabel]}>Details (optional)</Text>
+            <TextInput
+              style={[ui.input, styles.detailsInput]}
+              value={reportDetails}
+              onChangeText={setReportDetails}
+              placeholder="Add useful context"
+              placeholderTextColor={colors.placeholder}
+              multiline
+              maxLength={1000}
+            />
+            {reportMessage ? <Text style={reportMessage.includes('submitted') ? styles.confirmation : styles.error}>{reportMessage}</Text> : null}
+            <View style={ui.actions}>
+              <Pressable style={[styles.modalButton, styles.modalCancel]} onPress={() => setReportOpen(false)}>
+                <Text style={styles.modalCancelText}>Cancel</Text>
+              </Pressable>
+              <Pressable style={[styles.modalButton, styles.modalSubmit, reportBusy && ui.disabled]} onPress={submitReport} disabled={reportBusy}>
+                <Text style={ui.smallButtonText}>{reportBusy ? 'Submitting...' : 'Submit report'}</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </ScrollView>
   );
 }
@@ -147,4 +224,20 @@ const styles = StyleSheet.create({
   button: { ...ui.button, marginTop: spacing.lg },
   disabled: ui.disabled,
   buttonText: ui.buttonText,
+  reportArea: { marginTop: spacing.xl, alignItems: 'flex-start' },
+  reportButton: { borderWidth: 1, borderColor: colors.danger, borderRadius: 8, paddingVertical: spacing.sm, paddingHorizontal: spacing.md },
+  reportButtonText: { color: colors.danger, fontWeight: '700' },
+  confirmation: { color: colors.tagDoneText, marginBottom: spacing.sm },
+  modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', padding: spacing.md },
+  modalCard: { ...ui.card, padding: spacing.md, maxHeight: '90%' },
+  modalHint: { marginTop: spacing.sm, marginBottom: spacing.md },
+  reason: { borderWidth: 1, borderColor: colors.line, borderRadius: 8, padding: spacing.sm, marginBottom: spacing.xs },
+  reasonSelected: { borderColor: colors.accent, backgroundColor: colors.tagDone },
+  reasonTextSelected: { color: colors.accent, fontWeight: '700' },
+  detailsLabel: { marginTop: spacing.sm },
+  detailsInput: { minHeight: 72, textAlignVertical: 'top' },
+  modalButton: { flex: 1, borderRadius: 8, padding: spacing.sm, alignItems: 'center', justifyContent: 'center' },
+  modalCancel: { borderWidth: 1, borderColor: colors.line },
+  modalCancelText: { color: colors.ink, fontWeight: '700' },
+  modalSubmit: { backgroundColor: colors.accent },
 });

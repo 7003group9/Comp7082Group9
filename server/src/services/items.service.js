@@ -58,6 +58,7 @@ export async function fetchItems({
   const values = [];
   const conditions = [
     'i.is_sensitive = FALSE',
+    'i.is_hidden = FALSE',
     "i.status <> 'handed off'",
   ];
 

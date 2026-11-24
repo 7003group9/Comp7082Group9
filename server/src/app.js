@@ -3,6 +3,7 @@ import cors from 'cors';
 import auth from './routes/auth.routes.js';
 import items from './routes/items.routes.js';
 import claims from './routes/claims.routes.js';
+import reports from './routes/reports.routes.js';
 import { errorHandler, notFound } from './middleware/errorHandler.js';
 
 // Builds the Express app. Kept separate from index.js so tests can use it
@@ -16,6 +17,7 @@ app.get('/health', (req, res) => res.json({ ok: true }));
 app.use('/auth', auth);
 app.use('/items', items);
 app.use('/claims', claims);
+app.use('/reports', reports);
 
 // Must stay last: unknown routes -> 404, thrown errors -> JSON error.
 app.use(notFound);

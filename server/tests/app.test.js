@@ -209,6 +209,37 @@ test('only Campus Security can review and decide claims', () =>
     assert.equal(await status(`${base}/items/history`, { headers: as('student') }), 403);
   }));
 
+test('report creation validates authentication and item ids', () =>
+  withServer(async (base) => {
+    assert.equal(await status(`${base}/items/abc/report`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reason: 'Spam' }),
+    }), 400);
+    assert.equal(await status(`${base}/items/1/report`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reason: 'Spam' }),
+    }), 401);
+  }));
+
+test('only Campus Security can access the moderation queue and actions', () =>
+  withServer(async (base) => {
+    assert.equal(await status(`${base}/reports`), 401);
+    assert.equal(await status(`${base}/reports`, { headers: as('student') }), 403);
+    const queue = await fetch(`${base}/reports`, { headers: as('security') });
+    assert.equal(queue.status, 200);
+    assert.ok(Array.isArray(await queue.json()));
+    assert.equal(await status(`${base}/reports/1/hide`, {
+      method: 'POST',
+      headers: as('student'),
+    }), 403);
+    assert.equal(await status(`${base}/reports/1/dismiss`, {
+      method: 'POST',
+      headers: as('student'),
+    }), 403);
+  }));
+
 test('form options are public and match what posts accept', () =>
   withServer(async (base) => {
     const res = await fetch(`${base}/items/options`);

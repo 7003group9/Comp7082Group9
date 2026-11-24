@@ -12,7 +12,7 @@ import {
 import { fetchItems, getItemById, updateItem as updateItemService } from "../services/items.service.js";
 
 // Public fields ONLY. Private questions/answers are never selected here.
-const PUBLIC_FIELDS = `id, title, category, location, building, latitude, longitude, created_at AS "postedAt", status, flagged_unclaimed AS "flaggedUnclaimed"`;
+const PUBLIC_FIELDS = `id, title, category, location, latitude, longitude, created_at AS "postedAt", status, flagged_unclaimed AS "flaggedUnclaimed"`;
 
 const PAGE_SIZE = 20;
 
@@ -106,11 +106,12 @@ export async function listItems(req, res) {
        AND ($1::int IS NULL OR id < $1)
        AND ($2 = '' OR category = $2)
        AND ($3 = '' OR title ILIKE $3 OR location ILIKE $3)
-       AND ($4 = '' OR building = $4)
+       AND ($4 = '' OR location = $4)
        AND ($5::date IS NULL OR (created_at AT TIME ZONE 'America/Vancouver')::date >= $5::date)
        AND ($6::date IS NULL OR (created_at AT TIME ZONE 'America/Vancouver')::date <= $6::date)
        AND ($7::int IS NULL OR finder_id <> $7)
        AND is_sensitive = FALSE
+       AND is_hidden = FALSE
      ORDER BY id DESC LIMIT $8`,
     [
       before,
@@ -140,7 +141,7 @@ export const getFormOptions = (req, res) =>
 
 export async function getItem(req, res) {
   const { rows } = await query(
-    `SELECT ${PUBLIC_FIELDS} FROM items WHERE id = $1 AND is_sensitive = FALSE`,
+    `SELECT ${PUBLIC_FIELDS} FROM items WHERE id = $1 AND is_sensitive = FALSE AND is_hidden = FALSE`,
     [req.params.id],
   );
   if (!rows[0]) return res.status(404).json({ error: "Item not found" });
@@ -222,7 +223,6 @@ export async function createItem(req, res) {
     title,
     category,
     location,
-    building,
     latitude,
     longitude,
     questions,
@@ -232,15 +232,15 @@ export async function createItem(req, res) {
     req.body?.sensitive === "true";
   const { rows } = await query(
     `WITH item AS (
-       INSERT INTO items (finder_id, title, category, location, building, latitude, longitude, is_sensitive)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $12)
+       INSERT INTO items (finder_id, title, category, location, latitude, longitude, is_sensitive)
+       VALUES ($1, $2, $3, $4, $5, $6, $11)
        RETURNING ${PUBLIC_FIELDS}
      ), qs AS (
        INSERT INTO item_questions (item_id, question, expected_answer)
-       SELECT item.id, t.q, t.a FROM item, unnest($8::text[], $9::text[]) AS t(q, a)
+       SELECT item.id, t.q, t.a FROM item, unnest($7::text[], $8::text[]) AS t(q, a)
      ), imgs AS (
        INSERT INTO item_images (item_id, mime_type, data)
-       SELECT item.id, t.m, t.d FROM item, unnest($10::text[], $11::bytea[]) AS t(m, d)
+       SELECT item.id, t.m, t.d FROM item, unnest($9::text[], $10::bytea[]) AS t(m, d)
      )
      SELECT * FROM item`,
     [
@@ -248,7 +248,6 @@ export async function createItem(req, res) {
       title,
       category,
       location,
-      building,
       latitude,
       longitude,
       questions.map((q) => q.question),
@@ -341,7 +340,7 @@ export async function getItemForEdit(req, res) {
   const {
     rows: [item],
   } = await query(
-    `SELECT title, category, location, building, latitude, longitude,
+    `SELECT title, category, location, latitude, longitude,
             is_sensitive AS "isSensitive",
             EXISTS (SELECT 1 FROM claims WHERE item_id = items.id) AS claimed,
             (SELECT json_agg(json_build_object('question', question, 'answer', expected_answer) ORDER BY id)
@@ -366,22 +365,21 @@ export async function updateItem(req, res) {
     title,
     category,
     location,
-    building,
     latitude,
     longitude,
     questions,
   } = item;
   const { rows } = await query(
     `WITH item AS (
-       UPDATE items SET title = $2, category = $3, location = $4, building = $5, latitude = $6, longitude = $7,
-                        is_sensitive = COALESCE($10::boolean, is_sensitive)
+       UPDATE items SET title = $2, category = $3, location = $4, latitude = $5, longitude = $6,
+                        is_sensitive = COALESCE($9::boolean, is_sensitive)
        WHERE id = $1 AND NOT EXISTS (SELECT 1 FROM claims WHERE item_id = $1)
        RETURNING ${PUBLIC_FIELDS}
      ), old AS (
        DELETE FROM item_questions WHERE item_id IN (SELECT id FROM item)
      ), qs AS (
        INSERT INTO item_questions (item_id, question, expected_answer)
-       SELECT item.id, t.q, t.a FROM item, unnest($8::text[], $9::text[]) AS t(q, a)
+       SELECT item.id, t.q, t.a FROM item, unnest($7::text[], $8::text[]) AS t(q, a)
      )
      SELECT * FROM item`,
     [
@@ -389,7 +387,6 @@ export async function updateItem(req, res) {
       title,
       category,
       location,
-      building,
       latitude,
       longitude,
       questions.map((q) => q.question),
@@ -453,7 +450,7 @@ export async function markHandedOff(req, res) {
 // ponytail: no paging; add `before` paging like the feed if this list gets long.
 export async function listHistory(req, res) {
   const { rows } = await query(
-    `SELECT i.id, i.title, i.location, i.building, i.status, i.created_at AS "postedAt",
+    `SELECT i.id, i.title, i.location, i.status, i.created_at AS "postedAt",
             f.school_email AS "finderEmail",
             o.school_email AS "pickedUpBy", h.completed_at AS "pickedUpAt", s.school_email AS "handedOverBy"
      FROM items i

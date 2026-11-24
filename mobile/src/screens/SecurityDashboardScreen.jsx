@@ -1,7 +1,15 @@
 import { useCallback, useContext, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { AuthContext } from '../context/AuthContext';
-import { decideClaim, fetchClaimsToReview, markHandedOff, markReceived } from '../api/client';
+import {
+  decideClaim,
+  dismissReportedPost,
+  fetchClaimsToReview,
+  fetchReportedPosts,
+  hideReportedPost,
+  markHandedOff,
+  markReceived,
+} from '../api/client';
 import { where } from '../components/ItemCard';
 import StatusLabel from '../components/StatusLabel';
 import { useConfirm, useFocusList } from '../hooks';
@@ -19,6 +27,33 @@ export default function SecurityDashboardScreen({ navigation }) {
   );
   const [confirm, setConfirm] = useConfirm(); // "<claim id>:<decision>" waiting for a second tap
   const [busyId, setBusyId] = useState(null);
+  const reportList = useFocusList(
+    useCallback(() => fetchReportedPosts(user.token), [user.token])
+  );
+  const reports = reportList.list;
+  const setReports = reportList.setList;
+  const reportsLoading = reportList.loading;
+  const reportsError = reportList.error;
+  const setReportsError = reportList.setError;
+  const [reportConfirm, setReportConfirm] = useConfirm();
+  const [reportBusyId, setReportBusyId] = useState(null);
+
+  async function moderateReport(itemId, action) {
+    const key = `${itemId}:${action}`;
+    if (reportConfirm !== key) return setReportConfirm(key);
+    setReportBusyId(itemId);
+    setReportsError('');
+    try {
+      if (action === 'hide') await hideReportedPost(itemId, user.token);
+      else await dismissReportedPost(itemId, user.token);
+      setReports((rows) => rows.filter((row) => row.itemId !== itemId));
+    } catch (err) {
+      setReportsError(err.message);
+    } finally {
+      setReportBusyId(null);
+      setReportConfirm(null);
+    }
+  }
 
   async function onDecide(claim, decision) {
     if (confirm !== `${claim.id}:${decision}`) return setConfirm(`${claim.id}:${decision}`);
@@ -86,6 +121,47 @@ export default function SecurityDashboardScreen({ navigation }) {
             <Text style={ui.smallButtonText}>Past posts</Text>
           </Pressable>
           {error ? <Text style={styles.error}>{error}</Text> : null}
+          {reportsError ? <Text style={styles.error}>{reportsError}</Text> : null}
+          <Text style={styles.reportHeading}>Reported posts</Text>
+          {reportsLoading ? (
+            <ActivityIndicator style={styles.reportLoader} color={colors.accent} />
+          ) : reports.length === 0 ? (
+            <Text style={[type.meta, styles.reportEmpty]}>No open reports.</Text>
+          ) : reports.map((report) => (
+            <View key={report.itemId} style={styles.reportCard}>
+              <Text style={type.heading}>{report.title}</Text>
+              <Text style={type.meta}>{where(report)}</Text>
+              <Text style={type.meta}>{report.reportCount} report{report.reportCount === 1 ? '' : 's'} · Found by {report.finderEmail}</Text>
+              {report.reports.map((entry) => (
+                <View key={entry.id} style={styles.reportDetail}>
+                  <Text style={styles.reportReason}>{entry.reason}</Text>
+                  {entry.details ? <Text style={type.body}>{entry.details}</Text> : null}
+                  <Text style={type.meta}>{entry.reporterEmail}</Text>
+                </View>
+              ))}
+              <View style={ui.actions}>
+                {['hide', 'dismiss'].map((action) => {
+                  const key = `${report.itemId}:${action}`;
+                  const armed = reportConfirm === key;
+                  const label = action === 'hide' ? 'Hide post' : 'Dismiss';
+                  const color = action === 'hide' ? colors.danger : colors.accent;
+                  return (
+                    <Pressable
+                      key={action}
+                      style={[ui.action, { borderColor: color }, armed && { backgroundColor: color }]}
+                      onPress={() => moderateReport(report.itemId, action)}
+                      disabled={reportBusyId === report.itemId}
+                    >
+                      <Text style={[ui.actionText, { color: armed ? colors.onAccent : color }]}>
+                        {armed ? 'Tap again' : label}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </View>
+          ))}
+          <Text style={styles.reportHeading}>Claims</Text>
         </>
       }
       ListEmptyComponent={error ? null : <Text style={[type.body, styles.empty]}>No claims waiting for review.</Text>}
@@ -150,4 +226,10 @@ const styles = StyleSheet.create({
   history: { marginBottom: spacing.md },
   approved: { ...type.body, fontWeight: '600', color: colors.accent, marginTop: spacing.md },
   details: { color: colors.accent, fontWeight: '600', marginTop: spacing.sm },
+  reportHeading: { ...type.heading, marginTop: spacing.md, marginBottom: spacing.sm },
+  reportLoader: { marginVertical: spacing.md },
+  reportEmpty: { marginBottom: spacing.md },
+  reportCard: { ...ui.card, padding: spacing.md, marginBottom: spacing.md },
+  reportDetail: { marginTop: spacing.sm, gap: 2 },
+  reportReason: { ...type.body, fontWeight: '700', color: colors.danger },
 });

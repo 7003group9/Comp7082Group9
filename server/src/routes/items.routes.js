@@ -19,6 +19,7 @@ import {
   deleteDraft,
 } from "../controllers/items.controller.js";
 import { claimForm } from "../controllers/claims.controller.js";
+import { submitReport } from "../controllers/reports.controller.js";
 import {
   requireAuth,
   requireRole,
@@ -47,6 +48,7 @@ router.get("/:id", getItem);
 router.get("/:id/questions", requireAuth, claimForm);
 router.get("/:id/edit", requireAuth, requireNonGuest, getItemForEdit);
 router.post("/", requireAuth, requireNonGuest, photos, createItem);
+router.post("/:id/report", requireAuth, submitReport);
 router.put("/:id", requireAuth, requireNonGuest, updateItem);
 router.post("/:id/received", requireAuth, requireRole("security"), markReceived);
 router.post("/:id/handed-off", requireAuth, requireRole("security"), markHandedOff);
