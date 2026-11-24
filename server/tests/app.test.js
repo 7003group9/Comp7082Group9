@@ -232,4 +232,9 @@ test('server errors never show internal details to the user', () => {
   const mine = reply(Object.assign(new Error('Unexpected token } in JSON'), { status: 400 }));
   assert.equal(mine.code, 400);
   assert.equal(mine.body.error, 'Unexpected token } in JSON'); // client mistakes keep their message
+  // A login for a deleted user is a 401 (so the app logs out), not a 500.
+  const gone = reply(Object.assign(new Error('fk'), { code: '23503', detail: 'Key (finder_id)=(3) is not present in table "users".' }));
+  assert.equal(gone.code, 401);
+  // Other foreign key errors (e.g. a deleted item) are still not blamed on the login.
+  assert.equal(reply(Object.assign(new Error('fk'), { code: '23503', detail: 'Key (item_id)=(9) is not present in table "items".' })).code, 500);
 });
