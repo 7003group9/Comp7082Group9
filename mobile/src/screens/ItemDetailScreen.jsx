@@ -38,6 +38,8 @@ export default function ItemDetailScreen({ route }) {
   }, [photo]);
 
   useEffect(() => {
+    // Guests can look but not claim (the server refuses them too).
+    if (user.role === 'guest') return setUnavailable('Log in with your school email to claim this item.');
     let active = true;
     fetchClaimForm(id, user.token)
       .then((f) => active && setForm(f))
@@ -45,7 +47,7 @@ export default function ItemDetailScreen({ route }) {
     return () => {
       active = false;
     };
-  }, [id, user.token]);
+  }, [id, user.token, user.role]);
 
   async function send() {
     setError('');

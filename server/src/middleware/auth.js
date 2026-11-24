@@ -17,7 +17,7 @@ export const requireRole = (role) => (req, res, next) => {
   next();
 };
 
-// Guests can browse and claim items, but cannot manage posts.
+// Guests can only browse: no posting, managing posts or claiming.
 export function requireNonGuest(req, res, next) {
   if (req.user?.role === 'guest') {
     return res.status(403).json({ error: 'Guests cannot perform this action' });
