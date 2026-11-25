@@ -13,10 +13,14 @@ CREATE TABLE IF NOT EXISTS items (
   building            TEXT,                     -- campus building, optional (BUILDINGS in itemValidation.js)
   latitude            DOUBLE PRECISION CHECK (latitude BETWEEN -90 AND 90),     -- GPS pin (new posts must have one)
   longitude           DOUBLE PRECISION CHECK (longitude BETWEEN -180 AND 180),
+  is_sensitive        BOOLEAN NOT NULL DEFAULT FALSE,  -- ID/card/phone -> security only
+  is_hidden           BOOLEAN NOT NULL DEFAULT FALSE,  -- removed from public feeds by moderation
   status              TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'claim pending', 'claimed', 'dropped off', 'handed off')),  -- claimed = a claim was approved; dropped off = the finder left it at Campus Security
   created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),  -- when it was posted
   claimed_at          TIMESTAMPTZ                           -- when a claim was approved; the feed hides it 24h later
 );
+
+ALTER TABLE items ADD COLUMN IF NOT EXISTS building TEXT;
 
 -- PRIVATE: expected_answer never leaves the server. Only the question text is
 -- shown, to a logged-in claimant on the claim form.
@@ -38,6 +42,12 @@ CREATE TABLE IF NOT EXISTS item_images (
   blurred   BYTEA NOT NULL   -- small and blurred, for everyone else
 );
 
+ALTER TABLE item_images ADD COLUMN IF NOT EXISTS thumb BYTEA;
+ALTER TABLE item_images ADD COLUMN IF NOT EXISTS blurred BYTEA;
+
+ALTER TABLE users ALTER COLUMN school_email DROP NOT NULL;
+DROP TABLE IF EXISTS drafts;
+
 CREATE TABLE IF NOT EXISTS claims (
   id           SERIAL PRIMARY KEY,
   item_id      INTEGER NOT NULL REFERENCES items(id),
@@ -58,6 +68,24 @@ CREATE TABLE IF NOT EXISTS handoffs (
   staff_id     INTEGER NOT NULL REFERENCES users(id),
   completed_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+CREATE TABLE IF NOT EXISTS post_reports (
+  id           SERIAL PRIMARY KEY,
+  item_id      INTEGER NOT NULL REFERENCES items(id) ON DELETE CASCADE,
+  reporter_id  INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  reason       TEXT NOT NULL,
+  details      TEXT,
+  status       TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'dismissed', 'resolved')),
+  resolution   TEXT CHECK (resolution IN ('hidden', 'dismissed')),
+  resolved_by  INTEGER REFERENCES users(id),
+  resolved_at  TIMESTAMPTZ,
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS post_reports_one_per_user
+  ON post_reports (item_id, reporter_id);
+CREATE INDEX IF NOT EXISTS post_reports_item_idx ON post_reports (item_id);
+CREATE INDEX IF NOT EXISTS post_reports_status_idx ON post_reports (status);
 
 -- Indexes on the columns rows are looked up by. Postgres doesn't create them
 -- for foreign keys, and deleting an item has to find its questions, photos and claims.

@@ -9,7 +9,8 @@ import { clean } from '../services/itemValidation.js';
 // then 'dropped off' and 'handed off'). Undefined if there's no such item.
 async function findItem(id) {
   const { rows } = await query(
-    `SELECT finder_id AS "finderId", status, status IN ('claimed', 'dropped off', 'handed off') AS closed
+    `SELECT finder_id AS "finderId", status, is_hidden AS "isHidden",
+            (is_hidden OR status IN ('claimed', 'dropped off', 'handed off')) AS closed
      FROM items WHERE id = $1`,
     [id]
   );
@@ -162,3 +163,18 @@ export async function decideClaim(req, res) {
     throw err;
   }
 }
+
+// Backward-compatible aliases retained for the earlier mine/review API.
+export async function myClaims(req, res) {
+  const { rows } = await query(
+    `SELECT c.id, c.item_id AS "itemId", c.status, i.title, i.status AS "itemStatus"
+     FROM claims c
+     JOIN items i ON i.id = c.item_id
+     WHERE c.claimant_id = $1
+     ORDER BY c.id DESC`,
+    [req.user.id],
+  );
+  res.json(rows);
+}
+
+export const reviewClaims = claimsToReview;

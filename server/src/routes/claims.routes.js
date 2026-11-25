@@ -1,7 +1,6 @@
-// /claims routes: POST / submits a claim, and Campus Security reviews claims
-// (GET /review, POST /:id/decision).
+// /claims routes: submit and review claims.
 import { Router } from 'express';
-import { claimsToReview, createClaim, decideClaim } from '../controllers/claims.controller.js';
+import { claimsToReview, createClaim, decideClaim, myClaims } from '../controllers/claims.controller.js';
 import { requireAuth, requireNonGuest, requireRole } from '../middleware/auth.js';
 
 const router = Router();
@@ -11,5 +10,6 @@ router.param('id', (req, res, next, id) =>
 );
 router.post('/', requireAuth, requireNonGuest, createClaim);
 router.get('/review', ...security, claimsToReview);
+router.get('/mine', requireAuth, myClaims);
 router.post('/:id/decision', ...security, decideClaim);
 export default router;
