@@ -2,6 +2,7 @@ import { useContext, useEffect, useState } from 'react';
 import { ActivityIndicator, Linking, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { AuthContext } from '../context/AuthContext';
 import { fetchClaimForm, reportItem, submitClaim } from '../api/client';
+import ErrorRetry from '../components/ErrorRetry';
 import ItemPhoto from '../components/ItemPhoto';
 import { colors, spacing, type, ui } from '../theme';
 import { where } from '../components/ItemCard';
@@ -25,6 +26,8 @@ export default function ItemDetailScreen({ route }) {
   const { user } = useContext(AuthContext);
   const [form, setForm] = useState(null); // { questions, myClaim } from the server
   const [unavailable, setUnavailable] = useState(''); // why this item can't be claimed
+  const [loadFailed, setLoadFailed] = useState(''); // the claim form didn't load (offline, server error)
+  const [attempt, setAttempt] = useState(0); // bumped by "Try again" to load the form again
   const [answers, setAnswers] = useState({}); // { questionId: answer }
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -57,11 +60,13 @@ export default function ItemDetailScreen({ route }) {
     let active = true;
     fetchClaimForm(id, user.token)
       .then((f) => active && setForm(f))
-      .catch((err) => active && setUnavailable(err.message)); // own post, already claimed, or offline
+      // Offline or a server error: worth trying again. Anything else (own post, already
+      // claimed, locked out) is the answer, so it's shown as is.
+      .catch((err) => active && (err.retry ? setLoadFailed(err.message) : setUnavailable(err.message)));
     return () => {
       active = false;
     };
-  }, [id, user.token, user.role]);
+  }, [id, user.token, user.role, attempt]);
 
   async function send() {
     setError('');
@@ -90,7 +95,18 @@ export default function ItemDetailScreen({ route }) {
     </View>
   );
 
-  if (unavailable) {
+  if (loadFailed) {
+    claimSection = (
+      <ErrorRetry
+        message={loadFailed}
+        onRetry={() => {
+          setLoadFailed('');
+          setAttempt((n) => n + 1);
+        }}
+        style={styles.section}
+      />
+    );
+  } else if (unavailable) {
     // Someone else's claim was approved: shown like a claim status, in green.
     const closed = ['claimed', 'dropped off', 'handed off'].includes(route.params.status);
     claimSection = closed

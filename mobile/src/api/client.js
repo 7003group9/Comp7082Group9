@@ -28,18 +28,26 @@ export const setSessionExpiredHandler = (fn) => {
 async function send(method, path, body, token) {
   if (!API_URL) throw new Error("API URL is not configured");
   const form = body instanceof FormData; // the browser sets the multipart header itself
-  const res = await fetch(`${API_URL}${path}`, {
-    method,
-    headers: {
-      ...(!form && { "Content-Type": "application/json" }),
-      ...(token && { Authorization: `Bearer ${token}` }),
-    },
-    body: form ? body : body && JSON.stringify(body),
-  });
+  let res;
+  try {
+    res = await fetch(`${API_URL}${path}`, {
+      method,
+      headers: {
+        ...(!form && { "Content-Type": "application/json" }),
+        ...(token && { Authorization: `Bearer ${token}` }),
+      },
+      body: form ? body : body && JSON.stringify(body),
+    });
+  } catch {
+    // No reply at all: offline, or the server is down. (The browser only says "Failed to fetch".)
+    throw Object.assign(new Error("Can't reach the server. Check your connection and try again."), { retry: true });
+  }
   const data = await res.json().catch(() => ({}));
   if (res.status === 401 && token) onSessionExpired(data?.suspended ? data.error : null); // we sent a token and it was refused
   if (!res.ok) {
-    throw Object.assign(new Error(data?.error || `Request failed (${res.status})`), { fields: data?.fields });
+    // retry: trying again later could work (server error or too many attempts), unlike e.g. a 403.
+    const retry = res.status >= 500 || res.status === 429;
+    throw Object.assign(new Error(data?.error || `Request failed (${res.status})`), { fields: data?.fields, retry });
   }
   return data;
 }

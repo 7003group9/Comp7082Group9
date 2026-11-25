@@ -1,7 +1,8 @@
-import { useContext, useEffect, useState } from 'react';
+import { useCallback, useContext, useEffect, useState } from 'react';
 import { Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { AuthContext } from '../context/AuthContext';
 import { decideClaim, fetchItem, suspendUser } from '../api/client';
+import ErrorRetry from '../components/ErrorRetry';
 import { postedAt, where } from '../components/ItemCard';
 import ItemPhoto from '../components/ItemPhoto';
 import StatusLabel from '../components/StatusLabel';
@@ -20,9 +21,13 @@ export default function ClaimDetailScreen({ route }) {
   const [error, setError] = useState('');
   const [item, setItem] = useState(null); // null while loading, false if it failed
 
+  const loadItem = useCallback(
+    () => fetchItem(claim.itemId).then(setItem).catch(() => setItem(false)),
+    [claim.itemId]
+  );
   useEffect(() => {
-    fetchItem(claim.itemId).then(setItem).catch(() => setItem(false));
-  }, [claim.itemId]);
+    loadItem();
+  }, [loadItem]);
 
   async function onSuspend() {
     if (confirm !== 'suspend') return setConfirm('suspend');
@@ -96,7 +101,11 @@ export default function ClaimDetailScreen({ route }) {
           <ItemPhoto itemId={claim.itemId} title={claim.title} />
         </>
       ) : (
-        <Text style={type.meta}>{item === false ? "Couldn't load the item's details." : 'Loading item details...'}</Text>
+        item === false ? (
+          <ErrorRetry message="Couldn't load the item's details." onRetry={loadItem} />
+        ) : (
+          <Text style={type.meta}>Loading item details...</Text>
+        )
       )}
 
       <Text style={styles.section}>Claimant</Text>

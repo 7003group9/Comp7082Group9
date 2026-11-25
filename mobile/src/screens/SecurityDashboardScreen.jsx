@@ -13,6 +13,7 @@ import {
 import { where } from '../components/ItemCard';
 import StatusLabel from '../components/StatusLabel';
 import { useConfirm, useFocusList } from '../hooks';
+import ErrorRetry from '../components/ErrorRetry';
 import { colors, spacing, type, ui } from '../theme';
 
 // Campus Security only: pending claims, each answer beside the finder's expected
@@ -22,7 +23,7 @@ import { colors, spacing, type, ui } from '../theme';
 // Every button needs a second tap, since each step is final.
 export default function SecurityDashboardScreen({ navigation }) {
   const { user } = useContext(AuthContext);
-  const { list: claims, setList: setClaims, loading, error, setError } = useFocusList(
+  const { list: claims, setList: setClaims, loading, error, setError, failed, reload } = useFocusList(
     useCallback(() => fetchClaimsToReview(user.token), [user.token])
   );
   const [confirm, setConfirm] = useConfirm(); // "<claim id>:<decision>" waiting for a second tap
@@ -129,7 +130,11 @@ export default function SecurityDashboardScreen({ navigation }) {
               <Text style={ui.smallButtonText}>Locked out & suspended</Text>
             </Pressable>
           </View>
-          {error ? <Text style={styles.error}>{error}</Text> : null}
+          {failed ? (
+            <ErrorRetry message={error} onRetry={reload} />
+          ) : error ? (
+            <Text style={styles.error}>{error}</Text>
+          ) : null}
           {reportsError ? <Text style={styles.error}>{reportsError}</Text> : null}
           <Text style={styles.reportHeading}>Reported posts</Text>
           {reportsLoading ? (

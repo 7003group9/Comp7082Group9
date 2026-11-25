@@ -5,6 +5,7 @@ import { fetchHistory, setItemStatus } from '../api/client';
 import { postedAt, where } from '../components/ItemCard';
 import StatusLabel from '../components/StatusLabel';
 import { useConfirm, useFocusList } from '../hooks';
+import ErrorRetry from '../components/ErrorRetry';
 import { colors, spacing, type, ui } from '../theme';
 
 // What each status can be changed to by hand, and what the option says. Same rules as
@@ -23,7 +24,7 @@ const STATUS_OPTIONS = {
 export default function HistoryScreen() {
   const { user } = useContext(AuthContext);
   const load = useCallback(() => fetchHistory(user.token), [user.token]);
-  const { list: items, setList: setItems, loading, error, setError } = useFocusList(load);
+  const { list: items, setList: setItems, loading, error, setError, failed, reload } = useFocusList(load);
   const [openId, setOpenId] = useState(null); // the item whose dropdown is open
   const [confirm, setConfirm] = useConfirm(); // "<item id>:<status>" waiting for a second tap
   const [busyId, setBusyId] = useState(null);
@@ -52,7 +53,9 @@ export default function HistoryScreen() {
       contentContainerStyle={styles.list}
       data={items}
       keyExtractor={(i) => String(i.id)}
-      ListHeaderComponent={error ? <Text style={styles.error}>{error}</Text> : null}
+      ListHeaderComponent={
+        failed ? <ErrorRetry message={error} onRetry={reload} /> : error ? <Text style={styles.error}>{error}</Text> : null
+      }
       ListEmptyComponent={error ? null : <Text style={[type.body, styles.empty]}>Nothing has been posted yet.</Text>}
       renderItem={({ item }) => (
         <View style={styles.card}>

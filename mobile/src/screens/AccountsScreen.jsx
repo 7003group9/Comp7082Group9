@@ -4,6 +4,7 @@ import { AuthContext } from '../context/AuthContext';
 import { fetchRestrictedUsers, unlockUser, unsuspendUser } from '../api/client';
 import { postedAt } from '../components/ItemCard';
 import { useConfirm, useFocusList } from '../hooks';
+import ErrorRetry from '../components/ErrorRetry';
 import { colors, spacing, type, ui } from '../theme';
 
 // Campus Security only: people who are locked out of claiming (3 rejected claims) or
@@ -12,7 +13,7 @@ import { colors, spacing, type, ui } from '../theme';
 // Suspending is done from a claim (ClaimDetailScreen). Each button needs a second tap.
 export default function AccountsScreen() {
   const { user } = useContext(AuthContext);
-  const { list: users, setList: setUsers, loading, error, setError } = useFocusList(
+  const { list: users, setList: setUsers, loading, error, setError, failed, reload } = useFocusList(
     useCallback(() => fetchRestrictedUsers(user.token), [user.token])
   );
   const [confirm, setConfirm] = useConfirm(); // "<user id>:<action>" waiting for a second tap
@@ -65,7 +66,9 @@ export default function AccountsScreen() {
       contentContainerStyle={styles.list}
       data={users}
       keyExtractor={(u) => String(u.id)}
-      ListHeaderComponent={error ? <Text style={styles.error}>{error}</Text> : null}
+      ListHeaderComponent={
+        failed ? <ErrorRetry message={error} onRetry={reload} /> : error ? <Text style={styles.error}>{error}</Text> : null
+      }
       ListEmptyComponent={
         error ? null : <Text style={[type.body, styles.empty]}>Nobody is locked out or suspended.</Text>
       }
