@@ -24,7 +24,12 @@ export function photos(req, res, next) {
   upload.array('photos', MAX_PHOTOS)(req, res, (err) => {
     if (err instanceof multer.MulterError || err?.photoError) {
       const message = LIMIT_MESSAGES[err.code] ?? err.message;
-      return res.status(400).json({ error: message, fields: { photos: message } });
+      const validationError = Object.assign(new Error(message), {
+        status: 400,
+        fields: { photos: message },
+        code: 'INVALID_PHOTOS',
+      });
+      return next(validationError);
     }
     next(err);
   });

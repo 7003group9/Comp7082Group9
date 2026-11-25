@@ -9,7 +9,8 @@ import { clean } from '../services/itemValidation.js';
 // then 'dropped off' and 'handed off'). Undefined if there's no such item.
 async function findItem(id) {
   const { rows } = await query(
-    `SELECT finder_id AS "finderId", status, status IN ('claimed', 'dropped off', 'handed off') AS closed
+    `SELECT finder_id AS "finderId", status, is_hidden AS "isHidden",
+            (is_hidden OR status IN ('claimed', 'dropped off', 'handed off')) AS closed
      FROM items WHERE id = $1`,
     [id]
   );
@@ -107,7 +108,7 @@ export async function createClaim(req, res) {
 // itemStatus says whether it's still with the finder ('claimed') or at the desk ('dropped off').
 export async function claimsToReview(req, res) {
   const { rows } = await query(
-    `SELECT c.id, c.status, c.item_id AS "itemId", i.status AS "itemStatus", i.title, i.location, i.building, u.school_email AS "claimantEmail",
+    `SELECT c.id, c.status, c.item_id AS "itemId", i.status AS "itemStatus", i.title, i.location, u.school_email AS "claimantEmail",
             json_agg(json_build_object('questionId', q.id, 'question', q.question,
                      'expected', q.expected_answer, 'answer', a.answer) ORDER BY q.id) AS answers,
             (SELECT count(*)::int FROM claims r
@@ -162,3 +163,18 @@ export async function decideClaim(req, res) {
     throw err;
   }
 }
+
+// Backward-compatible aliases retained for the earlier mine/review API.
+export async function myClaims(req, res) {
+  const { rows } = await query(
+    `SELECT c.id, c.item_id AS "itemId", c.status, i.title, i.status AS "itemStatus"
+     FROM claims c
+     JOIN items i ON i.id = c.item_id
+     WHERE c.claimant_id = $1
+     ORDER BY c.id DESC`,
+    [req.user.id],
+  );
+  res.json(rows);
+}
+
+export const reviewClaims = claimsToReview;

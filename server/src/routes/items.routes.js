@@ -1,4 +1,4 @@
-// /items routes: public list, single item, posting (with photos), and managing your own posts.
+// /items routes: public feed, posting, claims, handoffs, and post management.
 import { Router } from "express";
 import {
   listItems,
@@ -15,6 +15,7 @@ import {
   deleteItem,
 } from "../controllers/items.controller.js";
 import { claimForm } from "../controllers/claims.controller.js";
+import { submitReport } from "../controllers/reports.controller.js";
 import {
   requireAuth,
   requireRole,
@@ -23,7 +24,6 @@ import {
 import { photos } from "../middleware/upload.js";
 
 const router = Router();
-// A non-numeric id (/items/abc) is the caller's mistake: 400, not a database error.
 router.param("id", (req, res, next, id) =>
   /^\d{1,9}$/.test(id)
     ? next()
@@ -31,7 +31,7 @@ router.param("id", (req, res, next, id) =>
 );
 
 router.get("/", listItems);
-// '/options', '/mine' and '/history' must stay above '/:id'.
+// Static routes must stay above /:id.
 router.get("/options", getFormOptions);
 router.get("/history", requireAuth, requireRole("security"), listHistory);
 router.get("/mine", requireAuth, requireNonGuest, listMine);
@@ -40,19 +40,10 @@ router.get("/:id/photo", getPhoto);
 router.get("/:id/questions", requireAuth, requireNonGuest, claimForm);
 router.get("/:id/edit", requireAuth, requireNonGuest, getItemForEdit);
 router.post("/", requireAuth, requireNonGuest, photos, createItem);
+router.post("/:id/report", requireAuth, submitReport);
 router.put("/:id", requireAuth, requireNonGuest, updateItem);
-router.post(
-  "/:id/received",
-  requireAuth,
-  requireRole("security"),
-  markReceived,
-);
-router.post(
-  "/:id/handed-off",
-  requireAuth,
-  requireRole("security"),
-  markHandedOff,
-);
+router.post("/:id/received", requireAuth, requireRole("security"), markReceived);
+router.post("/:id/handed-off", requireAuth, requireRole("security"), markHandedOff);
 router.delete("/:id", requireAuth, requireNonGuest, deleteItem);
 
 export default router;

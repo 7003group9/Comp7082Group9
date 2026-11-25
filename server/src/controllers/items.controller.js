@@ -9,7 +9,9 @@ import {
   PHOTO_TYPES,
   checkItem,
   clean,
+  coord,
 } from "../services/itemValidation.js";
+import { getItemById, updateItem as updateItemService } from "../services/items.service.js";
 
 // Public fields ONLY. Private questions/answers are never selected here.
 // flaggedUnclaimed: still unclaimed 30+ days after posting. Worked out on each read, so it's never stale.
@@ -52,7 +54,7 @@ export async function listItems(req, res) {
   const q = clean(req.query.q, 100);
   const category = clean(req.query.category, 50);
   const location = clean(req.query.location, 100);
-  const dateFrom = req.query.dateFrom ?? "";
+  const dateFrom = req.query.dateFrom ?? req.query.date ?? "";
   const dateTo = req.query.dateTo ?? "";
 
   const before = /^\d{1,9}$/.test(req.query.before ?? "")
@@ -92,6 +94,8 @@ export async function listItems(req, res) {
        AND ($5::date IS NULL OR (created_at AT TIME ZONE 'America/Vancouver')::date >= $5::date)
        AND ($6::date IS NULL OR (created_at AT TIME ZONE 'America/Vancouver')::date <= $6::date)
        AND ($7::int IS NULL OR finder_id <> $7)
+       AND is_sensitive = FALSE
+       AND is_hidden = FALSE
      ORDER BY id DESC LIMIT $8`,
     [
       before,
@@ -121,11 +125,61 @@ export const getFormOptions = (req, res) =>
 
 export async function getItem(req, res) {
   const { rows } = await query(
-    `SELECT ${PUBLIC_FIELDS} FROM items WHERE id = $1`,
+    `SELECT ${PUBLIC_FIELDS} FROM items WHERE id = $1 AND is_sensitive = FALSE AND is_hidden = FALSE`,
     [req.params.id],
   );
   if (!rows[0]) return res.status(404).json({ error: "Item not found" });
   res.json(rows[0]);
+}
+
+// PUT /items/:id: only the student who found an item may edit it.
+// This compatibility handler preserves partial edits from the earlier API.
+export async function editItem(req, res) {
+  const item = await getItemById(req.params.id);
+  if (!item) return res.status(404).json({ error: 'Item not found' });
+  if (item.finder_id !== req.user.id) {
+    return res.status(403).json({ error: 'You can only edit your own posts' });
+  }
+
+  const body = req.body ?? {};
+  const changes = {};
+  if (body.title !== undefined) changes.title = clean(body.title);
+  if (body.category !== undefined) changes.category = clean(body.category, 50);
+  if (body.location !== undefined) changes.location = clean(body.location);
+  if (body.building !== undefined) changes.building = clean(body.building, 50) || null;
+  if (body.latitude !== undefined) changes.latitude = coord(body.latitude, 90);
+  if (body.longitude !== undefined) changes.longitude = coord(body.longitude, 180);
+  if (body.sensitive !== undefined) {
+    changes.sensitive = body.sensitive === true || body.sensitive === 'true';
+  }
+
+  if (changes.category !== undefined && !CATEGORIES.includes(changes.category)) {
+    return res.status(400).json({ error: `Pick one of: ${CATEGORIES.join(', ')}.` });
+  }
+  if (changes.building && !BUILDINGS.includes(changes.building)) {
+    return res.status(400).json({ error: 'Pick a building from the list.' });
+  }
+  if (changes.title !== undefined && !changes.title) {
+    return res.status(400).json({ error: 'Say what the item is.' });
+  }
+  if (changes.location !== undefined && !changes.location) {
+    return res.status(400).json({ error: 'Describe where you found it.' });
+  }
+  if (body.latitude !== undefined || body.longitude !== undefined) {
+    const hasCompletePin = body.latitude !== undefined
+      && body.longitude !== undefined
+      && changes.latitude !== null
+      && changes.longitude !== null;
+    if (!hasCompletePin) {
+      return res.status(400).json({ error: 'That GPS position is not valid. Try again.' });
+    }
+  }
+  if (!Object.keys(changes).length) {
+    return res.status(400).json({ error: 'Provide at least one field to update' });
+  }
+
+  const updated = await updateItemService(req.params.id, changes);
+  res.json(updated);
 }
 
 // The two small copies of an uploaded photo, as WebP (keeps PNG transparency, smaller than JPEG).
@@ -152,9 +206,9 @@ export async function getPhoto(req, res) {
   const viewer = userFrom(req);
   // Only the chosen version is read from the database, so a thumbnail never loads the original.
   const { rows } = await query(
-    `SELECT mime_type, original, clear,
+    `SELECT mime_type, original, clear, original_data,
             CASE WHEN NOT clear THEN blurred WHEN original THEN data ELSE thumb END AS data
-     FROM (SELECT p.*, NOT $4 AS original,
+     FROM (SELECT p.*, p.data AS original_data, NOT $4 AS original,
                   (items.finder_id = $2 OR $3 OR EXISTS (
                      SELECT 1 FROM claims c
                      WHERE c.item_id = items.id AND c.claimant_id = $2 AND c.status = 'approved'
@@ -165,6 +219,18 @@ export async function getPhoto(req, res) {
   );
   const photo = rows[0];
   if (!photo) return res.status(404).json({ error: "No photo for this item" });
+  let { data } = photo;
+  if (!data && photo.original_data) {
+    const image = sharp(photo.original_data);
+    if (!photo.clear) {
+      data = await image.resize(400, 400, { fit: "inside" }).blur(12).webp({ quality: 70 }).toBuffer();
+    } else if (!photo.original) {
+      data = await image.resize(192, 192, { fit: "inside" }).webp({ quality: 80 }).toBuffer();
+    } else {
+      data = photo.original_data;
+    }
+  }
+  if (!data) return res.status(404).json({ error: "No photo for this item" });
 
   // The made-at-upload versions are WebP. Uploads only allow PHOTO_TYPES, but check
   // the original's type again so a bad row can never be served as HTML/SVG.
@@ -172,7 +238,6 @@ export async function getPhoto(req, res) {
   if (photo.clear && photo.original) {
     type = PHOTO_TYPES.includes(photo.mime_type) ? photo.mime_type : "application/octet-stream";
   }
-  const { data } = photo;
   // The answer depends on who is asking, so only the viewer's own browser may cache it,
   // and it must check back each time (an approved claim switches blurred to clear).
   // Express's ETag makes an unchanged photo a quick 304.
@@ -226,10 +291,13 @@ export async function createItem(req, res) {
     longitude,
     questions,
   } = item;
+  const sensitive =
+    req.body?.sensitive === true ||
+    req.body?.sensitive === "true";
   const { rows } = await query(
     `WITH item AS (
-       INSERT INTO items (finder_id, title, category, location, building, latitude, longitude)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       INSERT INTO items (finder_id, title, category, location, building, latitude, longitude, is_sensitive)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $14)
        RETURNING ${PUBLIC_FIELDS}
      ), qs AS (
        INSERT INTO item_questions (item_id, question, expected_answer)
@@ -254,15 +322,16 @@ export async function createItem(req, res) {
       photos.map((p) => p.buffer),
       versions.map((v) => v.thumb),
       versions.map((v) => v.blurred),
+      sensitive,
     ],
   );
-  res.status(201).json(rows[0]);
+  res.status(201).json({ ...rows[0], routedToSecurity: sensitive });
 }
 
 // GET /items/mine: everything the logged-in user posted.
 export async function listMine(req, res) {
   const { rows } = await query(
-    `SELECT ${PUBLIC_FIELDS} FROM items
+    `SELECT ${PUBLIC_FIELDS}, is_sensitive AS "isSensitive" FROM items
      WHERE finder_id = $1 ORDER BY id DESC`,
     [req.user.id],
   );
@@ -299,6 +368,7 @@ export async function getItemForEdit(req, res) {
     rows: [item],
   } = await query(
     `SELECT title, category, location, building, latitude, longitude,
+            is_sensitive AS "isSensitive",
             EXISTS (SELECT 1 FROM claims WHERE item_id = items.id) AS claimed,
             (SELECT json_agg(json_build_object('question', question, 'answer', expected_answer) ORDER BY id)
              FROM item_questions WHERE item_id = items.id) AS questions
@@ -314,6 +384,7 @@ export async function getItemForEdit(req, res) {
 // Same rules as posting (checkItem). Photos stay as they are. The item and its
 // questions are replaced in ONE statement, and only if it's still unclaimed.
 export async function updateItem(req, res) {
+  if (req.body?.questions === undefined) return editItem(req, res);
   if (!(await ownItem(req, res, NOT_YOURS))) return;
   const { item, errors } = checkItem(req.body ?? {});
   if (Object.keys(errors).length) return formErrors(res, errors);
@@ -328,7 +399,8 @@ export async function updateItem(req, res) {
   } = item;
   const { rows } = await query(
     `WITH item AS (
-       UPDATE items SET title = $2, category = $3, location = $4, building = $5, latitude = $6, longitude = $7
+       UPDATE items SET title = $2, category = $3, location = $4, building = $5,
+                        latitude = $6, longitude = $7, is_sensitive = COALESCE($10::boolean, is_sensitive)
        WHERE id = $1 AND NOT EXISTS (SELECT 1 FROM claims WHERE item_id = $1)
        RETURNING ${PUBLIC_FIELDS}
      ), old AS (
@@ -348,6 +420,11 @@ export async function updateItem(req, res) {
       longitude,
       questions.map((q) => q.question),
       questions.map((q) => q.answer),
+      req.body?.sensitive === true || req.body?.sensitive === "true"
+        ? true
+        : req.body?.sensitive === false || req.body?.sensitive === "false"
+          ? false
+          : null,
     ],
   );
   if (!rows[0]) return res.status(409).json({ error: LOCKED });
@@ -402,7 +479,7 @@ export async function markHandedOff(req, res) {
 // ponytail: no paging; add `before` paging like the feed if this list gets long.
 export async function listHistory(req, res) {
   const { rows } = await query(
-    `SELECT i.id, i.title, i.location, i.building, i.status, i.created_at AS "postedAt",
+    `SELECT i.id, i.title, i.location, i.status, i.created_at AS "postedAt",
             f.school_email AS "finderEmail",
             o.school_email AS "pickedUpBy", h.completed_at AS "pickedUpAt", s.school_email AS "handedOverBy"
      FROM items i

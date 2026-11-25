@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build"
+    "build": "vite build",
+    "lint": "npm run build"
   },
   "dependencies": {
     "@react-navigation/native": "^7.5.0",
