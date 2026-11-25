@@ -81,6 +81,9 @@ export default function ClaimDetailScreen({ route }) {
       <Text style={type.heading}>{claim.title}</Text>
       <Text style={type.meta}>{where(claim)}</Text>
       <StatusLabel claim={claim.status} />
+      {claim.decidedBy ? (
+        <Text style={type.meta}>Approved by {claim.decidedBy} on {postedAt(claim.decidedAt)}</Text>
+      ) : null}
 
       <Text style={styles.section}>Item</Text>
       {item ? (

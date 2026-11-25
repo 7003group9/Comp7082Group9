@@ -10,7 +10,7 @@ import {
   markHandedOff,
   markReceived,
 } from '../api/client';
-import { where } from '../components/ItemCard';
+import { postedAt, where } from '../components/ItemCard';
 import StatusLabel from '../components/StatusLabel';
 import { useConfirm, useFocusList } from '../hooks';
 import ErrorRetry from '../components/ErrorRetry';
@@ -185,6 +185,9 @@ export default function SecurityDashboardScreen({ navigation }) {
           <Text style={type.meta}>{where(claim)}</Text>
           <Text style={[type.meta, styles.gap]}>Claimed by {claim.claimantEmail}</Text>
           <StatusLabel claim={claim.status} />
+          {claim.decidedBy ? (
+            <Text style={type.meta}>Approved by {claim.decidedBy} on {postedAt(claim.decidedAt)}</Text>
+          ) : null}
           <Pressable
             onPress={() => navigation.navigate('ClaimDetail', { claim })}
             accessibilityRole="button"

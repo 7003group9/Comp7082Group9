@@ -11,6 +11,7 @@ import { setSuspended } from '../services/suspensions.js';
 export async function restrictedUsers(req, res) {
   const { rows } = await query(
     `SELECT id, school_email AS email, role, suspended_at AS "suspendedAt", rejected,
+            (SELECT s.school_email FROM users s WHERE s.id = u.suspended_by) AS "suspendedBy",
             rejected - unlocked_rejections >= $1 AS locked
      FROM (SELECT u.*, (SELECT count(*)::int FROM claims c
                         WHERE c.claimant_id = u.id AND c.status = 'rejected') AS rejected
@@ -43,10 +44,12 @@ export async function suspendUser(req, res) {
     return res.status(400).json({ error: "You can't suspend your own account." });
   }
   const { rows } = await query(
-    `UPDATE users SET suspended_at = COALESCE(suspended_at, now())
+    // Suspending someone already suspended keeps the original who and when.
+    `UPDATE users SET suspended_at = COALESCE(suspended_at, now()),
+                      suspended_by = CASE WHEN suspended_at IS NULL THEN $2 ELSE suspended_by END
      WHERE id = $1 AND role <> 'security'
      RETURNING id, suspended_at AS "suspendedAt"`,
-    [req.params.id]
+    [req.params.id, req.user.id]
   );
   if (!rows[0]) return res.status(404).json({ error: 'No student or guest account with that id.' });
   setSuspended(rows[0].id, true);
@@ -55,7 +58,7 @@ export async function suspendUser(req, res) {
 
 // POST /users/:id/unsuspend: restores the account. They log in again as normal.
 export async function unsuspendUser(req, res) {
-  const { rows } = await query('UPDATE users SET suspended_at = NULL WHERE id = $1 RETURNING id', [req.params.id]);
+  const { rows } = await query('UPDATE users SET suspended_at = NULL, suspended_by = NULL WHERE id = $1 RETURNING id', [req.params.id]);
   if (!rows[0]) return res.status(404).json({ error: 'User not found' });
   setSuspended(rows[0].id, false);
   res.json({ id: rows[0].id, suspendedAt: null });

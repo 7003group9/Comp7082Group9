@@ -408,8 +408,9 @@ export async function markReceived(req, res) {
   } = await query("SELECT status FROM items WHERE id = $1", [req.params.id]);
   if (!item) return res.status(404).json({ error: "Item not found" });
   const { rows } = await query(
-    `UPDATE items SET status = 'dropped off' WHERE id = $1 AND status = 'claimed' RETURNING ${PUBLIC_FIELDS}`,
-    [req.params.id],
+    `UPDATE items SET status = 'dropped off', received_by = $2, received_at = now()
+     WHERE id = $1 AND status = 'claimed' RETURNING ${PUBLIC_FIELDS}`,
+    [req.params.id, req.user.id],
   );
   if (!rows[0]) {
     const error =
@@ -462,11 +463,15 @@ export async function setStatus(req, res) {
   if (!(STATUS_CHANGES[item.status] ?? []).includes(to)) {
     return res.status(400).json({ error: `An item that is '${item.status}' can't be changed to '${to}'.` });
   }
+  // Same as the buttons, so who and when get recorded.
   if (to === "handed off") return markHandedOff(req, res);
-  // "AND status = $3": if someone changed it in the meantime, nothing is updated (409).
+  if (to === "dropped off") return markReceived(req, res);
+  // What's left is undoing "received": it isn't at the desk, so clear who took it in.
+  // "AND status = 'dropped off'": if someone changed it in the meantime, nothing is updated (409).
   const { rows } = await query(
-    `UPDATE items SET status = $2 WHERE id = $1 AND status = $3 RETURNING ${PUBLIC_FIELDS}`,
-    [req.params.id, to, item.status],
+    `UPDATE items SET status = 'claimed', received_by = NULL, received_at = NULL
+     WHERE id = $1 AND status = 'dropped off' RETURNING ${PUBLIC_FIELDS}`,
+    [req.params.id],
   );
   if (!rows[0]) return res.status(409).json({ error: "This item was just changed by someone else. Refresh and try again." });
   res.json(rows[0]);
@@ -478,10 +483,11 @@ export async function setStatus(req, res) {
 export async function listHistory(req, res) {
   const { rows } = await query(
     `SELECT i.id, i.title, i.location, i.building, i.status, i.created_at AS "postedAt", i.is_hidden AS hidden,
-            f.school_email AS "finderEmail",
+            f.school_email AS "finderEmail", r.school_email AS "receivedBy", i.received_at AS "receivedAt",
             o.school_email AS "pickedUpBy", h.completed_at AS "pickedUpAt", s.school_email AS "handedOverBy"
      FROM items i
      JOIN users f ON f.id = i.finder_id
+     LEFT JOIN users r ON r.id = i.received_by
      LEFT JOIN claims c ON c.item_id = i.id AND c.status = 'approved'
      LEFT JOIN users o ON o.id = c.claimant_id
      LEFT JOIN handoffs h ON h.claim_id = c.id

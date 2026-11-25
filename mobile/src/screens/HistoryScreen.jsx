@@ -108,6 +108,11 @@ export default function HistoryScreen() {
                 : null}
             </>
           ) : null}
+          {item.receivedAt ? (
+            <Text style={type.meta}>
+              Received at the desk by {item.receivedBy} on {postedAt(item.receivedAt)}
+            </Text>
+          ) : null}
           {item.pickedUpAt ? (
             <Text style={styles.pickup}>
               Picked up by {item.pickedUpBy} on {postedAt(item.pickedUpAt)}
