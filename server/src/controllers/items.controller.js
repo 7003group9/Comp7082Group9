@@ -179,6 +179,7 @@ export async function editItem(req, res) {
   }
 
   const updated = await updateItemService(req.params.id, changes);
+  if (!updated) return res.status(409).json({ error: LOCKED });
   res.json(updated);
 }
 
@@ -479,7 +480,7 @@ export async function markHandedOff(req, res) {
 // ponytail: no paging; add `before` paging like the feed if this list gets long.
 export async function listHistory(req, res) {
   const { rows } = await query(
-    `SELECT i.id, i.title, i.location, i.status, i.created_at AS "postedAt",
+    `SELECT i.id, i.title, i.location, i.building, i.status, i.created_at AS "postedAt",
             f.school_email AS "finderEmail",
             o.school_email AS "pickedUpBy", h.completed_at AS "pickedUpAt", s.school_email AS "handedOverBy"
      FROM items i

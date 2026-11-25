@@ -53,6 +53,7 @@ export async function updateItem(id, changes) {
     `UPDATE items
      SET ${assignments.join(', ')}
      WHERE id = $${values.length}
+       AND NOT EXISTS (SELECT 1 FROM claims WHERE item_id = items.id)
      RETURNING ${PUBLIC_FIELDS}`,
     values
   );

@@ -2,6 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import app from '../src/app.js';
+import { pool } from '../src/config/db.js';
 import { issueCode, checkCode, forgetCode } from '../src/services/loginCodes.js';
 import { errorHandler } from '../src/middleware/errorHandler.js';
 import { signToken, verifyToken } from '../src/services/token.js';
@@ -175,6 +176,39 @@ test('my posts, editing and deleting need login', () =>
     assert.equal(await status(`${base}/items/1`, { method: 'DELETE' }), 401);
   }));
 
+test('partial edits block claimed posts and allow unclaimed posts', async (t) => {
+  let claimed = true;
+  const saved = { id: 1, title: 'Edited item' };
+  t.mock.method(pool, 'query', async (text, params) => {
+    if (text.includes('SELECT id, finder_id')) return { rows: [{ id: 1, finder_id: 1 }] };
+    if (text.includes('UPDATE items')) {
+      assert.match(text, /NOT EXISTS \(SELECT 1 FROM claims WHERE item_id = items\.id\)/);
+      assert.deepEqual(params, ['Edited item', '1']);
+      return { rows: claimed ? [] : [saved] };
+    }
+    throw new Error(`Unexpected database query: ${text}`);
+  });
+
+  await withServer(async (base) => {
+    const edit = () => fetch(`${base}/items/1`, {
+      method: 'PUT',
+      headers: as(),
+      body: JSON.stringify({ title: 'Edited item' }),
+    });
+
+    const blocked = await edit();
+    assert.equal(blocked.status, 409);
+    assert.deepEqual(await blocked.json(), {
+      error: 'Someone has already claimed this item, so it can no longer be edited',
+    });
+
+    claimed = false;
+    const allowed = await edit();
+    assert.equal(allowed.status, 200);
+    assert.deepEqual(await allowed.json(), saved);
+  });
+});
+
 test('claiming needs login and a real item id', () =>
   withServer(async (base) => {
     const claim = (body, headers) => status(`${base}/claims`, { method: 'POST', headers, body: JSON.stringify(body) });
@@ -208,6 +242,27 @@ test('only Campus Security can review and decide claims', () =>
     assert.equal(await status(`${base}/items/history`), 401);
     assert.equal(await status(`${base}/items/history`, { headers: as('student') }), 403);
   }));
+
+test('Review claims and History return the building field', async (t) => {
+  const claim = { id: 1, title: 'Bottle', location: '2nd floor', building: 'SW1' };
+  const historyItem = { id: 1, title: 'Bottle', location: '2nd floor', building: 'SW1' };
+  t.mock.method(pool, 'query', async (text) => {
+    assert.match(text, /i\.building/);
+    if (text.includes('FROM claims c')) return { rows: [claim] };
+    if (text.includes('FROM items i')) return { rows: [historyItem] };
+    throw new Error(`Unexpected database query: ${text}`);
+  });
+
+  await withServer(async (base) => {
+    const review = await fetch(`${base}/claims/review`, { headers: as('security') });
+    assert.equal(review.status, 200);
+    assert.equal((await review.json())[0].building, 'SW1');
+
+    const history = await fetch(`${base}/items/history`, { headers: as('security') });
+    assert.equal(history.status, 200);
+    assert.equal((await history.json())[0].building, 'SW1');
+  });
+});
 
 test('report creation validates authentication and item ids', () =>
   withServer(async (base) => {

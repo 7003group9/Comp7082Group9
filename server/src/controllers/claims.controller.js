@@ -108,7 +108,7 @@ export async function createClaim(req, res) {
 // itemStatus says whether it's still with the finder ('claimed') or at the desk ('dropped off').
 export async function claimsToReview(req, res) {
   const { rows } = await query(
-    `SELECT c.id, c.status, c.item_id AS "itemId", i.status AS "itemStatus", i.title, i.location, u.school_email AS "claimantEmail",
+    `SELECT c.id, c.status, c.item_id AS "itemId", i.status AS "itemStatus", i.title, i.location, i.building, u.school_email AS "claimantEmail",
             json_agg(json_build_object('questionId', q.id, 'question', q.question,
                      'expected', q.expected_answer, 'answer', a.answer) ORDER BY q.id) AS answers,
             (SELECT count(*)::int FROM claims r

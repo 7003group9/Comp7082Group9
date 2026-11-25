@@ -129,7 +129,7 @@ export const markReceived = (itemId, token) => post(`/items/${itemId}/received`,
 // Campus Security only: the owner picked the item up at the desk. Records who and when. Final.
 export const markHandedOff = (itemId, token) => post(`/items/${itemId}/handed-off`, undefined, token);
 
-// Campus Security only: every post, newest first, with finderEmail and, once collected,
+// Campus Security only: every post, newest first, with building, finderEmail and, once collected,
 // pickedUpBy, pickedUpAt and handedOverBy.
 export const fetchHistory = (token) => send("GET", "/items/history", undefined, token);
 
