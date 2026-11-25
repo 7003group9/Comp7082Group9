@@ -8,6 +8,7 @@ import { signToken, verifyToken } from '../src/services/token.js';
 import { BUILDINGS, CATEGORIES, MAX_QUESTIONS, checkItem } from '../src/services/itemValidation.js';
 import { MAX_REJECTED_CLAIMS, isLockedOut } from '../src/controllers/claims.controller.js';
 import { STATUS_CHANGES } from '../src/controllers/items.controller.js';
+import { rateLimit, resetRateLimits } from '../src/middleware/rateLimit.js';
 import { isSuspended, setSuspended } from '../src/services/suspensions.js';
 
 // Starts the app on a free port, runs fn(baseUrl), and always stops it again.
@@ -302,3 +303,40 @@ test('only Campus Security can change an item status', () =>
     assert.equal(await change(1, as('guest')), 403);
     assert.equal(await change('abc', as('security')), 400);
   }));
+
+test('the 6th login attempt in a minute gets 429', () =>
+  withServer(async (base) => {
+    resetRateLimits();
+    const tryCode = () =>
+      status(`${base}/auth/verify-code`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: 'x@my.bcit.ca', code: '000000', challenge: 'nope' }),
+      });
+    for (let i = 0; i < 5; i++) assert.equal(await tryCode(), 401); // wrong code, but allowed to try
+    assert.equal(await tryCode(), 429);
+    resetRateLimits();
+  }));
+
+test('rate limits are per person and reset after the minute', () => {
+  resetRateLimits();
+  let now = 1_000_000;
+  const realNow = Date.now;
+  Date.now = () => now;
+  try {
+    const limit = rateLimit('test', { key: (req) => req.who });
+    const call = (who) => {
+      let code = 200;
+      limit({ who }, { set() {}, status: (c) => ((code = c), { json() {} }) }, () => {});
+      return code;
+    };
+    for (let i = 0; i < 5; i++) assert.equal(call('a'), 200);
+    assert.equal(call('a'), 429);
+    assert.equal(call('b'), 200); // someone else isn't affected
+    now += 60 * 1000; // a minute later
+    assert.equal(call('a'), 200);
+  } finally {
+    Date.now = realNow;
+    resetRateLimits();
+  }
+});
