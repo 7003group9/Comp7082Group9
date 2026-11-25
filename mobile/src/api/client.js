@@ -130,7 +130,7 @@ export const markReceived = (itemId, token) => post(`/items/${itemId}/received`,
 // Campus Security only: the owner picked the item up at the desk. Records who and when. Final.
 export const markHandedOff = (itemId, token) => post(`/items/${itemId}/handed-off`, undefined, token);
 
-// Campus Security only: every post, newest first, with finderEmail and, once collected,
+// Campus Security only: every post, newest first, with building, finderEmail and, once collected,
 // pickedUpBy, pickedUpAt and handedOverBy.
 export const fetchHistory = (token) => send("GET", "/items/history", undefined, token);
 
@@ -151,3 +151,12 @@ export const unlockUser = (userId, token) => post(`/users/${userId}/unlock`, und
 // Campus Security only: suspend an account (logged out, can't log back in) or restore it.
 export const suspendUser = (userId, token) => post(`/users/${userId}/suspend`, undefined, token);
 export const unsuspendUser = (userId, token) => post(`/users/${userId}/unsuspend`, undefined, token);
+// Reporting and Campus Security moderation.
+export const reportItem = (id, reason, details, token) =>
+  post(`/items/${id}/report`, { reason, details }, token);
+export const fetchReportedPosts = (token) =>
+  send("GET", "/reports", undefined, token);
+export const hideReportedPost = (itemId, token) =>
+  post(`/reports/${itemId}/hide`, undefined, token);
+export const dismissReportedPost = (itemId, token) =>
+  post(`/reports/${itemId}/dismiss`, undefined, token);

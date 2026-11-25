@@ -5,6 +5,7 @@ import items from './routes/items.routes.js';
 import claims from './routes/claims.routes.js';
 import users from './routes/users.routes.js';
 import { rejectSuspended } from './middleware/auth.js';
+import reports from './routes/reports.routes.js';
 import { errorHandler, notFound } from './middleware/errorHandler.js';
 
 // Builds the Express app. Kept separate from index.js so tests can use it
@@ -20,6 +21,7 @@ app.use('/auth', auth);
 app.use('/items', items);
 app.use('/claims', claims);
 app.use('/users', users);
+app.use('/reports', reports);
 
 // Must stay last: unknown routes -> 404, thrown errors -> JSON error.
 app.use(notFound);

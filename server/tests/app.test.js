@@ -2,6 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import app from '../src/app.js';
+import { pool } from '../src/config/db.js';
 import { issueCode, checkCode, forgetCode } from '../src/services/loginCodes.js';
 import { errorHandler } from '../src/middleware/errorHandler.js';
 import { signToken, verifyToken } from '../src/services/token.js';
@@ -179,6 +180,39 @@ test('my posts, editing and deleting need login', () =>
     assert.equal(await status(`${base}/items/1`, { method: 'DELETE' }), 401);
   }));
 
+test('partial edits block claimed posts and allow unclaimed posts', async (t) => {
+  let claimed = true;
+  const saved = { id: 1, title: 'Edited item' };
+  t.mock.method(pool, 'query', async (text, params) => {
+    if (text.includes('SELECT id, finder_id')) return { rows: [{ id: 1, finder_id: 1 }] };
+    if (text.includes('UPDATE items')) {
+      assert.match(text, /NOT EXISTS \(SELECT 1 FROM claims WHERE item_id = items\.id\)/);
+      assert.deepEqual(params, ['Edited item', '1']);
+      return { rows: claimed ? [] : [saved] };
+    }
+    throw new Error(`Unexpected database query: ${text}`);
+  });
+
+  await withServer(async (base) => {
+    const edit = () => fetch(`${base}/items/1`, {
+      method: 'PUT',
+      headers: as(),
+      body: JSON.stringify({ title: 'Edited item' }),
+    });
+
+    const blocked = await edit();
+    assert.equal(blocked.status, 409);
+    assert.deepEqual(await blocked.json(), {
+      error: 'Someone has already claimed this item, so it can no longer be edited',
+    });
+
+    claimed = false;
+    const allowed = await edit();
+    assert.equal(allowed.status, 200);
+    assert.deepEqual(await allowed.json(), saved);
+  });
+});
+
 test('claiming needs login and a real item id', () =>
   withServer(async (base) => {
     const claim = (body, headers) => status(`${base}/claims`, { method: 'POST', headers, body: JSON.stringify(body) });
@@ -213,12 +247,140 @@ test('only Campus Security can review and decide claims', () =>
     assert.equal(await status(`${base}/items/history`, { headers: as('student') }), 403);
   }));
 
+test('Review claims and History return the building field', async (t) => {
+  const claim = { id: 1, title: 'Bottle', location: '2nd floor', building: 'SW1' };
+  const historyItem = { id: 1, title: 'Bottle', location: '2nd floor', building: 'SW1' };
+  t.mock.method(pool, 'query', async (text) => {
+    assert.match(text, /i\.building/);
+    if (text.includes('FROM claims c')) return { rows: [claim] };
+    if (text.includes('FROM items i')) return { rows: [historyItem] };
+    throw new Error(`Unexpected database query: ${text}`);
+  });
+
+  await withServer(async (base) => {
+    const review = await fetch(`${base}/claims/review`, { headers: as('security') });
+    assert.equal(review.status, 200);
+    assert.equal((await review.json())[0].building, 'SW1');
+
+    const history = await fetch(`${base}/items/history`, { headers: as('security') });
+    assert.equal(history.status, 200);
+    assert.equal((await history.json())[0].building, 'SW1');
+  });
+});
+
+test('report creation validates authentication and item ids', () =>
+  withServer(async (base) => {
+    assert.equal(await status(`${base}/items/abc/report`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reason: 'Spam' }),
+    }), 400);
+    assert.equal(await status(`${base}/items/1/report`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reason: 'Spam' }),
+    }), 401);
+  }));
+
+test('only Campus Security can access the moderation queue and actions', () =>
+  withServer(async (base) => {
+    assert.equal(await status(`${base}/reports`), 401);
+    assert.equal(await status(`${base}/reports`, { headers: as('student') }), 403);
+    const queue = await fetch(`${base}/reports`, { headers: as('security') });
+    assert.equal(queue.status, 200);
+    assert.ok(Array.isArray(await queue.json()));
+    assert.equal(await status(`${base}/reports/1/hide`, {
+      method: 'POST',
+      headers: as('student'),
+    }), 403);
+    assert.equal(await status(`${base}/reports/1/dismiss`, {
+      method: 'POST',
+      headers: as('student'),
+    }), 403);
+  }));
+
 test('form options are public and match what posts accept', () =>
   withServer(async (base) => {
     const res = await fetch(`${base}/items/options`);
     assert.equal(res.status, 200);
     assert.deepEqual(await res.json(), { categories: CATEGORIES, buildings: BUILDINGS, maxQuestions: MAX_QUESTIONS });
   }));
+
+test('unknown routes return consistent JSON 404s', () =>
+  withServer(async (base) => {
+    const res = await fetch(`${base}/does-not-exist`);
+    assert.equal(res.status, 404);
+    assert.deepEqual(await res.json(), { error: 'Not found', code: 'NOT_FOUND' });
+  }));
+
+test('malformed JSON returns a clean 400 payload', () =>
+  withServer(async (base) => {
+    const res = await fetch(`${base}/health`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{"broken"',
+    });
+    assert.equal(res.status, 400);
+    const payload = await res.json();
+    assert.equal(payload.error, 'Invalid JSON request body');
+    assert.equal(payload.code, 'INVALID_JSON');
+  }));
+
+test('global error handler maps operational and database errors', () => {
+  const invoke = (err) => {
+    let out;
+    const res = {
+      status(code) {
+        return {
+          json(body) {
+            out = { code, body };
+          },
+        };
+      },
+    };
+    const log = console.error;
+    console.error = () => {};
+    errorHandler(err, { method: 'GET', originalUrl: '/test' }, res, () => {});
+    console.error = log;
+    return out;
+  };
+
+  assert.deepEqual(invoke(Object.assign(new Error('Already submitted'), { status: 409 })).body,
+    { error: 'Already submitted', code: 'HTTP_409' });
+  assert.deepEqual(invoke(Object.assign(new Error('raw duplicate detail'), { code: '23505' })).body,
+    { error: 'This record already exists', code: 'DB_23505' });
+  assert.deepEqual(invoke(Object.assign(new Error('raw foreign key detail'), { code: '23503' })).body,
+    { error: 'This record is referenced by another record', code: 'DB_23503' });
+  assert.deepEqual(invoke(Object.assign(new Error("invalid input syntax for integer"), { code: '22P02' })).body,
+    { error: 'Invalid value provided', code: 'DB_22P02' });
+});
+
+test('unexpected errors return safe 500 JSON without stack traces', () => {
+  let out;
+  const res = {
+    status(code) {
+      return {
+        json(body) {
+          out = { code, body };
+        },
+      };
+    },
+  };
+  const err = new Error('postgresql://secret-user:secret@internal-host/database');
+  err.stack = 'sensitive stack trace';
+  const log = console.error;
+  console.error = () => {};
+  errorHandler(err, { method: 'GET', originalUrl: '/test' }, res, () => {});
+  console.error = log;
+
+  assert.equal(out.code, 500);
+  assert.deepEqual(out.body, {
+    error: 'Something went wrong. Please try again.',
+    code: 'INTERNAL_SERVER_ERROR',
+  });
+  assert.ok(!JSON.stringify(out.body).includes('secret'));
+  assert.ok(!JSON.stringify(out.body).includes('stack trace'));
+});
 
 test('server errors never show internal details to the user', () => {
   const reply = (err) => {
@@ -239,8 +401,8 @@ test('server errors never show internal details to the user', () => {
   // A login for a deleted user is a 401 (so the app logs out), not a 500.
   const gone = reply(Object.assign(new Error('fk'), { code: '23503', detail: 'Key (finder_id)=(3) is not present in table "users".' }));
   assert.equal(gone.code, 401);
-  // Other foreign key errors (e.g. a deleted item) are still not blamed on the login.
-  assert.equal(reply(Object.assign(new Error('fk'), { code: '23503', detail: 'Key (item_id)=(9) is not present in table "items".' })).code, 500);
+  // Other foreign key errors (e.g. a deleted item) are conflicts, not login failures.
+  assert.equal(reply(Object.assign(new Error('fk'), { code: '23503', detail: 'Key (item_id)=(9) is not present in table "items".' })).code, 409);
 });
 
 test('a claimant is locked out after 3 rejected claims, until Campus Security unlocks them', () => {
