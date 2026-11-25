@@ -167,7 +167,8 @@ export default function ItemDetailScreen({ route }) {
       {form && !form.myClaim ? <Text style={[type.heading, styles.section]}>Is this yours?</Text> : null}
       {claimSection}
 
-      {['open', 'claim pending'].includes(route.params.status) ? (
+      {/* Students only: the server refuses reports from guests (throwaway accounts). */}
+      {['open', 'claim pending'].includes(route.params.status) && user.role !== 'guest' ? (
         <View style={styles.reportArea}>
           {reportMessage ? <Text style={reportMessage.includes('submitted') ? styles.confirmation : styles.error}>{reportMessage}</Text> : null}
           <Pressable
