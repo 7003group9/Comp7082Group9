@@ -368,7 +368,7 @@ test('unexpected errors return safe 500 JSON without stack traces', () => {
     },
   };
   const err = new Error('postgresql://secret-user:secret@internal-host/database');
-  err.stack = 'sensitive stack trace';
+  err.stack = 'internal stack trace';
   const log = console.error;
   console.error = () => {};
   errorHandler(err, { method: 'GET', originalUrl: '/test' }, res, () => {});
