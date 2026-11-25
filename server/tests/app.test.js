@@ -1,5 +1,6 @@
 // Run with `npm test` (Node's built-in test runner, no extra packages).
 import test from 'node:test';
+import { spawnSync } from 'node:child_process';
 import assert from 'node:assert/strict';
 import app from '../src/app.js';
 import { pool } from '../src/config/db.js';
@@ -502,3 +503,34 @@ test('rate limits are per person and reset after the minute', () => {
     resetRateLimits();
   }
 });
+
+test('the server refuses to start in production with the public default token secret', () => {
+  const start = (secret) =>
+    spawnSync(process.execPath, ['-e', "import('./src/config/env.js')"], {
+      env: { PATH: process.env.PATH, NODE_ENV: 'production', ...(secret && { JWT_SECRET: secret }) },
+    }).status;
+  assert.notEqual(start(), 0); // not set: would use 'dev-secret'
+  assert.notEqual(start('change-me'), 0); // the value from .env.example
+  assert.notEqual(start('too-short'), 0);
+  assert.equal(start('x'.repeat(40)), 0); // a real secret is fine
+});
+
+test('login emails with a "+" alias are refused', () =>
+  withServer(async (base) => {
+    resetRateLimits();
+    const res = await fetch(`${base}/auth/request-code`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: 'bob+again@my.bcit.ca' }),
+    });
+    assert.equal(res.status, 400);
+    resetRateLimits();
+  }));
+
+test('guests cannot report posts', () =>
+  withServer(async (base) => {
+    const report = (headers) =>
+      status(`${base}/items/1/report`, { method: 'POST', headers, body: JSON.stringify({ reason: 'Spam' }) });
+    assert.equal(await report({ 'Content-Type': 'application/json' }), 401);
+    assert.equal(await report(as('guest')), 403);
+  }));

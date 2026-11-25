@@ -23,6 +23,7 @@ import {
   requireNonGuest,
 } from "../middleware/auth.js";
 import { photos } from "../middleware/upload.js";
+import { rateLimit } from "../middleware/rateLimit.js";
 
 const router = Router();
 router.param("id", (req, res, next, id) =>
@@ -41,7 +42,9 @@ router.get("/:id/photo", getPhoto);
 router.get("/:id/questions", requireAuth, requireNonGuest, claimForm);
 router.get("/:id/edit", requireAuth, requireNonGuest, getItemForEdit);
 router.post("/", requireAuth, requireNonGuest, photos, createItem);
-router.post("/:id/report", requireAuth, submitReport);
+// Students only (guest accounts are throwaway), 5 reports a minute, so nobody can flood
+// Campus Security's report queue.
+router.post("/:id/report", requireAuth, requireNonGuest, rateLimit("report", { key: (req) => req.user.id }), submitReport);
 router.put("/:id", requireAuth, requireNonGuest, updateItem);
 router.post("/:id/received", requireAuth, requireRole("security"), markReceived);
 router.post("/:id/handed-off", requireAuth, requireRole("security"), markHandedOff);

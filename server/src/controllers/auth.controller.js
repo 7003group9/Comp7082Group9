@@ -9,8 +9,10 @@ const clean = (v) =>
   String(v ?? "")
     .trim()
     .toLowerCase();
+// No "+": school email delivers name+anything@ to name@, so it would give one person
+// endless accounts and get around a suspension or the 3-rejection lockout.
 const isStudentEmail = (e) =>
-  /^[^@\s]+@[^@\s]+$/.test(e) && e.endsWith(`@${STUDENT_EMAIL_DOMAIN}`);
+  /^[^@\s+]+@[^@\s]+$/.test(e) && e.endsWith(`@${STUDENT_EMAIL_DOMAIN}`);
 
 // Step 1: POST /auth/request-code { email } -> emails a 6-digit code and
 // replies { ok, challenge }. The app must send the challenge back with the code.
