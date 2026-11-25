@@ -94,7 +94,6 @@ export async function listItems(req, res) {
        AND ($5::date IS NULL OR (created_at AT TIME ZONE 'America/Vancouver')::date >= $5::date)
        AND ($6::date IS NULL OR (created_at AT TIME ZONE 'America/Vancouver')::date <= $6::date)
        AND ($7::int IS NULL OR finder_id <> $7)
-       AND is_sensitive = FALSE
        AND is_hidden = FALSE
      ORDER BY id DESC LIMIT $8`,
     [
@@ -125,7 +124,7 @@ export const getFormOptions = (req, res) =>
 
 export async function getItem(req, res) {
   const { rows } = await query(
-    `SELECT ${PUBLIC_FIELDS} FROM items WHERE id = $1 AND is_sensitive = FALSE AND is_hidden = FALSE`,
+    `SELECT ${PUBLIC_FIELDS} FROM items WHERE id = $1 AND is_hidden = FALSE`,
     [req.params.id],
   );
   if (!rows[0]) return res.status(404).json({ error: "Item not found" });
@@ -149,10 +148,6 @@ export async function editItem(req, res) {
   if (body.building !== undefined) changes.building = clean(body.building, 50) || null;
   if (body.latitude !== undefined) changes.latitude = coord(body.latitude, 90);
   if (body.longitude !== undefined) changes.longitude = coord(body.longitude, 180);
-  if (body.sensitive !== undefined) {
-    changes.sensitive = body.sensitive === true || body.sensitive === 'true';
-  }
-
   if (changes.category !== undefined && !CATEGORIES.includes(changes.category)) {
     return res.status(400).json({ error: `Pick one of: ${CATEGORIES.join(', ')}.` });
   }
@@ -292,13 +287,10 @@ export async function createItem(req, res) {
     longitude,
     questions,
   } = item;
-  const sensitive =
-    req.body?.sensitive === true ||
-    req.body?.sensitive === "true";
   const { rows } = await query(
     `WITH item AS (
-       INSERT INTO items (finder_id, title, category, location, building, latitude, longitude, is_sensitive)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $14)
+       INSERT INTO items (finder_id, title, category, location, building, latitude, longitude)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
        RETURNING ${PUBLIC_FIELDS}
      ), qs AS (
        INSERT INTO item_questions (item_id, question, expected_answer)
@@ -323,16 +315,15 @@ export async function createItem(req, res) {
       photos.map((p) => p.buffer),
       versions.map((v) => v.thumb),
       versions.map((v) => v.blurred),
-      sensitive,
     ],
   );
-  res.status(201).json({ ...rows[0], routedToSecurity: sensitive });
+  res.status(201).json(rows[0]);
 }
 
 // GET /items/mine: everything the logged-in user posted.
 export async function listMine(req, res) {
   const { rows } = await query(
-    `SELECT ${PUBLIC_FIELDS}, is_sensitive AS "isSensitive" FROM items
+    `SELECT ${PUBLIC_FIELDS} FROM items
      WHERE finder_id = $1 ORDER BY id DESC`,
     [req.user.id],
   );
@@ -369,7 +360,6 @@ export async function getItemForEdit(req, res) {
     rows: [item],
   } = await query(
     `SELECT title, category, location, building, latitude, longitude,
-            is_sensitive AS "isSensitive",
             EXISTS (SELECT 1 FROM claims WHERE item_id = items.id) AS claimed,
             (SELECT json_agg(json_build_object('question', question, 'answer', expected_answer) ORDER BY id)
              FROM item_questions WHERE item_id = items.id) AS questions
@@ -401,7 +391,7 @@ export async function updateItem(req, res) {
   const { rows } = await query(
     `WITH item AS (
        UPDATE items SET title = $2, category = $3, location = $4, building = $5,
-                        latitude = $6, longitude = $7, is_sensitive = COALESCE($10::boolean, is_sensitive)
+                        latitude = $6, longitude = $7
        WHERE id = $1 AND NOT EXISTS (SELECT 1 FROM claims WHERE item_id = $1)
        RETURNING ${PUBLIC_FIELDS}
      ), old AS (
@@ -421,11 +411,6 @@ export async function updateItem(req, res) {
       longitude,
       questions.map((q) => q.question),
       questions.map((q) => q.answer),
-      req.body?.sensitive === true || req.body?.sensitive === "true"
-        ? true
-        : req.body?.sensitive === false || req.body?.sensitive === "false"
-          ? false
-          : null,
     ],
   );
   if (!rows[0]) return res.status(409).json({ error: LOCKED });

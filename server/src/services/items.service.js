@@ -19,7 +19,6 @@ const EDITABLE_FIELDS = {
   building: 'building',
   latitude: 'latitude',
   longitude: 'longitude',
-  sensitive: 'is_sensitive',
 };
 
 // Retrieves ownership information before an edit is attempted. The controller
