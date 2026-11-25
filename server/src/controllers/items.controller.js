@@ -80,7 +80,7 @@ export async function listItems(req, res) {
   const { rows } = await query(
     `SELECT ${PUBLIC_FIELDS},
             (SELECT c.status FROM claims c WHERE c.item_id = items.id AND c.claimant_id = $7) AS "myClaim",
-            EXISTS (SELECT 1 FROM item_images i WHERE i.item_id = items.id) AS "hasPhoto"
+            (NOT is_hidden AND EXISTS (SELECT 1 FROM item_images i WHERE i.item_id = items.id)) AS "hasPhoto"
      FROM items
      WHERE (status IN ('open', 'claim pending')
             OR (status IN ('claimed', 'dropped off') AND claimed_at > now() - interval '24 hours')
@@ -127,7 +127,8 @@ export const getFormOptions = (req, res) =>
 
 export async function getItem(req, res) {
   const { rows } = await query(
-    `SELECT ${PUBLIC_FIELDS} FROM items WHERE id = $1 AND is_hidden = FALSE`,
+    `SELECT ${PUBLIC_FIELDS}, EXISTS (SELECT 1 FROM item_images i WHERE i.item_id = items.id) AS "hasPhoto"
+     FROM items WHERE id = $1 AND is_hidden = FALSE`,
     [req.params.id],
   );
   if (!rows[0]) return res.status(404).json({ error: "Item not found" });
@@ -203,13 +204,14 @@ export async function getPhoto(req, res) {
   // Only return the one copy we need, so the other two aren't loaded.
   const { rows } = await query(
     `SELECT CASE WHEN NOT clear THEN blurred WHEN thumb_only THEN thumb ELSE large END AS data
-     FROM (SELECT p.large, p.thumb, p.blurred, $4::boolean AS thumb_only,
+     FROM (SELECT p.large, p.thumb, p.blurred, $4::boolean AS thumb_only, items.is_hidden AS hidden,
                   (items.finder_id = $2 OR $3 OR EXISTS (
                      SELECT 1 FROM claims c
                      WHERE c.item_id = items.id AND c.claimant_id = $2 AND c.status = 'approved'
                    )) IS TRUE AS clear
            FROM item_images p JOIN items ON items.id = p.item_id
-           WHERE p.item_id = $1 ORDER BY p.id LIMIT 1) photo`,
+           WHERE p.item_id = $1 ORDER BY p.id LIMIT 1) photo
+     WHERE clear OR NOT hidden -- a hidden post's photo is only for the finder, security and the owner`,
     [req.params.id, viewer?.id ?? null, viewer?.role === "security", req.query.size === "thumb"],
   );
   if (!rows[0]) return res.status(404).json({ error: "No photo for this item" });
