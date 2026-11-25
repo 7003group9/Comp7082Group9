@@ -12,6 +12,7 @@ import MyListingsScreen from "./src/screens/MyListingsScreen";
 import SecurityDashboardScreen from "./src/screens/SecurityDashboardScreen";
 import HistoryScreen from "./src/screens/HistoryScreen";
 import ClaimDetailScreen from "./src/screens/ClaimDetailScreen";
+import AccountsScreen from "./src/screens/AccountsScreen";
 import { colors } from "./src/theme";
 import { AuthProvider, AuthContext } from "./src/context/AuthContext";
 import { useContext } from "react";
@@ -115,6 +116,11 @@ function AppNavigator() {
                   name="ClaimDetail"
                   component={ClaimDetailScreen}
                   options={{ title: "Claim" }}
+                />
+                <Stack.Screen
+                  name="Accounts"
+                  component={AccountsScreen}
+                  options={{ title: "Locked out & suspended" }}
                 />
               </>
             ) : null}

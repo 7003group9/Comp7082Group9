@@ -78,13 +78,22 @@ export default function SecurityDashboardScreen({ navigation }) {
       keyExtractor={(c) => String(c.id)}
       ListHeaderComponent={
         <>
-          <Pressable
-            style={({ pressed }) => [ui.smallButton, styles.history, pressed && ui.pressed]}
-            onPress={() => navigation.navigate('History')}
-            accessibilityRole="button"
-          >
-            <Text style={ui.smallButtonText}>Past posts</Text>
-          </Pressable>
+          <View style={styles.links}>
+            <Pressable
+              style={({ pressed }) => [ui.smallButton, pressed && ui.pressed]}
+              onPress={() => navigation.navigate('History')}
+              accessibilityRole="button"
+            >
+              <Text style={ui.smallButtonText}>Past posts</Text>
+            </Pressable>
+            <Pressable
+              style={({ pressed }) => [ui.smallButton, pressed && ui.pressed]}
+              onPress={() => navigation.navigate('Accounts')}
+              accessibilityRole="button"
+            >
+              <Text style={ui.smallButtonText}>Locked out & suspended</Text>
+            </Pressable>
+          </View>
           {error ? <Text style={styles.error}>{error}</Text> : null}
         </>
       }
@@ -147,7 +156,7 @@ const styles = StyleSheet.create({
   gap: { marginTop: spacing.xs },
   qa: { marginTop: spacing.md, gap: 2 },
   question: { ...type.body, fontWeight: '600' },
-  history: { marginBottom: spacing.md },
+  links: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginBottom: spacing.md },
   approved: { ...type.body, fontWeight: '600', color: colors.accent, marginTop: spacing.md },
   details: { color: colors.accent, fontWeight: '600', marginTop: spacing.sm },
 });
