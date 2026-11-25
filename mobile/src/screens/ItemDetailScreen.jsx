@@ -17,8 +17,7 @@ const CLAIM_STATUS = {
   // Approved, and Campus Security recorded that you picked it up.
   collected: { headline: 'You picked this up.', next: 'Glad you got it back!', color: colors.tagDone, text: colors.tagDoneText },
   rejected: { headline: "Your claim wasn't approved.", next: 'If this really is yours, visit Campus Security with proof.', color: colors.tagNo, text: colors.tagNoText },
-  // Campus Security hid the post while this claim was waiting. Not the claimant's fault,
-  // so it doesn't count toward the rejected-claims lockout.
+  // The post was hidden while this claim was pending.
   'post hidden': { headline: 'This post was hidden by Campus Security.', next: "Your claim was closed and doesn't count against you. If this is yours, visit Campus Security.", color: colors.tagNo, text: colors.tagNoText },
 };
 

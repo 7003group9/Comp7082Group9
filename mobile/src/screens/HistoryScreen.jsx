@@ -20,8 +20,7 @@ const STATUS_OPTIONS = {
 
 // Campus Security only: every post, newest first, with who found it and, once
 // collected, who picked it up, when, and which staff member handed it over.
-// Items waiting on the desk have a status dropdown, and hidden posts an Unhide button
-// (which also reopens the claims hiding closed); each needs a second tap.
+// Items at the desk have a status dropdown and hidden posts have an Unhide button.
 export default function HistoryScreen() {
   const { user } = useContext(AuthContext);
   const load = useCallback(() => fetchHistory(user.token), [user.token]);

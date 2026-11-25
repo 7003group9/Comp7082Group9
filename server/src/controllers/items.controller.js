@@ -93,8 +93,7 @@ export async function listItems(req, res) {
        AND ($5::date IS NULL OR (created_at AT TIME ZONE 'America/Vancouver')::date >= $5::date)
        AND ($6::date IS NULL OR (created_at AT TIME ZONE 'America/Vancouver')::date <= $6::date)
        AND ($7::int IS NULL OR finder_id <> $7)
-       -- Hidden posts only show to people whose claim the hide closed, for 24 hours,
-       -- so they find out why (their card says "Removed by Campus Security").
+       -- Hidden posts still show for 24h to people whose claim got closed by the hide.
        AND (is_hidden = FALSE
             OR (hidden_at > now() - interval '24 hours'
                 AND EXISTS (SELECT 1 FROM claims c WHERE c.item_id = items.id
@@ -182,15 +181,9 @@ export async function editItem(req, res) {
   res.json(updated);
 }
 
-// The three copies of an uploaded photo that get stored (the upload itself is not), as
-// WebP (keeps PNG transparency, smaller than JPEG). sharp leaves out the upload's
-// metadata, so the finder's GPS location and phone model are never stored or sent.
-// rotate() first: phones store photos sideways with an "up is this way" tag that the
-// browser follows but the copies would lose, so the pixels are turned upright.
-// large: clear, up to 1280px (sharper than any phone shows it; never enlarged).
-// thumb: clear, 192px (sharp on the 96px feed card on high-res screens).
-// blurred: shrunk to 400px BEFORE blurring, so fine detail (stickers, writing) is gone
-// and the blur is equally strong whatever size the upload was.
+// The three WebP copies we store instead of the upload (this also drops its GPS/camera data).
+// rotate() turns phone photos upright. The blurred copy is shrunk first so small
+// details like stickers or writing can't be read.
 const photoVersions = async (buffer) => {
   const upright = sharp(buffer).rotate();
   const [large, thumb, blurred] = await Promise.all([
@@ -207,8 +200,7 @@ const photoVersions = async (buffer) => {
 // ?size=thumb gets them a small clear copy (for feed cards) instead of the large one.
 export async function getPhoto(req, res) {
   const viewer = userFrom(req);
-  // Only the chosen copy is read from the database: big columns are only fetched when a
-  // query returns them, so the outer SELECT must return nothing but the CASE.
+  // Only return the one copy we need, so the other two aren't loaded.
   const { rows } = await query(
     `SELECT CASE WHEN NOT clear THEN blurred WHEN thumb_only THEN thumb ELSE large END AS data
      FROM (SELECT p.large, p.thumb, p.blurred, $4::boolean AS thumb_only,
@@ -241,7 +233,7 @@ export async function createItem(req, res) {
   const { item, errors } = checkItem(req.body ?? {}, photos);
   if (Object.keys(errors).length) return formErrors(res, errors);
 
-  // The stored copies, made once here so viewing never has to. Bytes that look like
+  // Make the photo copies now so viewing never has to. Bytes that look like
   // an image but can't be decoded get the same 400 as any other bad photo.
   let versions;
   try {
@@ -476,10 +468,9 @@ export async function setStatus(req, res) {
   res.json(rows[0]);
 }
 
-// GET /items/history (security only): every post (hidden ones too, with hidden: true so
-// staff can unhide them), newest first, with who found it and,
+// GET /items/history (security only): every post (including hidden ones), newest first, with who found it and,
 // once collected, who picked it up, when, and which staff member handed it over.
-// ponytail: no paging; add `before` paging like the feed if this list gets long.
+// No paging yet; add `before` paging like the feed if this list gets long.
 export async function listHistory(req, res) {
   const { rows } = await query(
     `SELECT i.id, i.title, i.location, i.building, i.status, i.created_at AS "postedAt", i.is_hidden AS hidden,

@@ -14,8 +14,7 @@ const TONE = {
 // Wording depends on who's looking: mine = the finder, myClaim = the viewer's own claim.
 function forItem(item, mine) {
   const approved = item.myClaim === 'approved';
-  // Campus Security hid the post (moderation). hidden is only sent to the finder (My
-  // posts) and staff (Past posts); claimants it affected get myClaim 'post hidden'.
+  // Post hidden by Campus Security.
   if (item.hidden) return ['Hidden by Campus Security', 'rejected'];
   if (item.myClaim === 'post hidden') return ['Removed by Campus Security', 'rejected'];
   // Someone whose claim was turned down sees that, whatever happened to the item since.

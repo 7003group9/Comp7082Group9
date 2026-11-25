@@ -97,9 +97,7 @@ export async function hideReportedPost(itemId, adminId) {
       throw httpError('No open reports found for this item.', 404);
     }
 
-    // Hidden posts can't be claimed, so pending claims are closed as 'post hidden' (not
-    // 'rejected', so they don't count toward anyone's lockout), and with none left
-    // pending the item goes back from 'claim pending' to 'open'.
+    // Close any pending claims and set the item back to open.
     await client.query(
       `UPDATE claims SET status = 'post hidden' WHERE item_id = $1 AND status = 'pending'`,
       [itemId]
@@ -126,11 +124,8 @@ export async function hideReportedPost(itemId, adminId) {
   }
 }
 
-// Undoes a hide (e.g. pressed by mistake): the post is public again and the claims the
-// hide closed go back to 'pending' for review, as if it never happened. One statement,
-// so it all happens or none of it. Every part sees the rows as they were before it ran,
-// so the item can check for 'post hidden' claims while the same statement reopens them.
-// Returns how many claims were reopened; 404 if the post isn't hidden.
+// Undo a hide: make the post public again and reopen the claims the hide closed.
+// Returns how many claims were reopened.
 export async function unhidePost(itemId) {
   const { rows } = await query(
     `WITH item AS (
