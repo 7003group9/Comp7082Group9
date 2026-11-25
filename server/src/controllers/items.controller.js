@@ -397,6 +397,35 @@ export async function markHandedOff(req, res) {
   res.json(rows[0]);
 }
 
+// The status changes Campus Security can make by hand (the dropdown on Past posts).
+// 'open' and 'claim pending' follow the claims, so they aren't here. 'handed off' is
+// final. 'dropped off' -> 'claimed' undoes a "received" pressed by mistake.
+export const STATUS_CHANGES = {
+  claimed: ["dropped off"],
+  "dropped off": ["handed off", "claimed"],
+};
+
+// PATCH /items/:id/status { status } (security only). Only the changes in STATUS_CHANGES
+// (400 otherwise). Handing off also records who and when, like the "Picked up" button.
+export async function setStatus(req, res) {
+  const to = req.body?.status;
+  const {
+    rows: [item],
+  } = await query("SELECT status FROM items WHERE id = $1", [req.params.id]);
+  if (!item) return res.status(404).json({ error: "Item not found" });
+  if (!(STATUS_CHANGES[item.status] ?? []).includes(to)) {
+    return res.status(400).json({ error: `An item that is '${item.status}' can't be changed to '${to}'.` });
+  }
+  if (to === "handed off") return markHandedOff(req, res);
+  // "AND status = $3": if someone changed it in the meantime, nothing is updated (409).
+  const { rows } = await query(
+    `UPDATE items SET status = $2 WHERE id = $1 AND status = $3 RETURNING ${PUBLIC_FIELDS}`,
+    [req.params.id, to, item.status],
+  );
+  if (!rows[0]) return res.status(409).json({ error: "This item was just changed by someone else. Refresh and try again." });
+  res.json(rows[0]);
+}
+
 // GET /items/history (security only): every post, newest first, with who found it and,
 // once collected, who picked it up, when, and which staff member handed it over.
 // ponytail: no paging; add `before` paging like the feed if this list gets long.

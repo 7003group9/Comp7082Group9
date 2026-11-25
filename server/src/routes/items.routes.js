@@ -8,6 +8,7 @@ import {
   getItemForEdit,
   createItem,
   updateItem,
+  setStatus,
   markReceived,
   markHandedOff,
   listHistory,
@@ -53,6 +54,7 @@ router.post(
   requireRole("security"),
   markHandedOff,
 );
+router.patch("/:id/status", requireAuth, requireRole("security"), setStatus);
 router.delete("/:id", requireAuth, requireNonGuest, deleteItem);
 
 export default router;

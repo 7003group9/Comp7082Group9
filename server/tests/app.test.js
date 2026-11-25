@@ -7,6 +7,7 @@ import { errorHandler } from '../src/middleware/errorHandler.js';
 import { signToken, verifyToken } from '../src/services/token.js';
 import { BUILDINGS, CATEGORIES, MAX_QUESTIONS, checkItem } from '../src/services/itemValidation.js';
 import { MAX_REJECTED_CLAIMS, isLockedOut } from '../src/controllers/claims.controller.js';
+import { STATUS_CHANGES } from '../src/controllers/items.controller.js';
 import { isSuspended, setSuspended } from '../src/services/suspensions.js';
 
 // Starts the app on a free port, runs fn(baseUrl), and always stops it again.
@@ -283,4 +284,21 @@ test('a suspended user is logged out on their next request', () =>
       setSuspended(4242, false);
     }
     assert.equal(isSuspended(4242), false);
+  }));
+
+test('Campus Security can only make the allowed status changes by hand', () => {
+  assert.deepEqual(STATUS_CHANGES.claimed, ['dropped off']);
+  assert.deepEqual([...STATUS_CHANGES['dropped off']].sort(), ['claimed', 'handed off']);
+  // Claims decide these, and a handed-off item is final.
+  for (const from of ['open', 'claim pending', 'handed off']) assert.equal(STATUS_CHANGES[from], undefined);
+});
+
+test('only Campus Security can change an item status', () =>
+  withServer(async (base) => {
+    const change = (id, headers) =>
+      status(`${base}/items/${id}/status`, { method: 'PATCH', headers, body: JSON.stringify({ status: 'dropped off' }) });
+    assert.equal(await change(1, { 'Content-Type': 'application/json' }), 401);
+    assert.equal(await change(1, as('student')), 403);
+    assert.equal(await change(1, as('guest')), 403);
+    assert.equal(await change('abc', as('security')), 400);
   }));
