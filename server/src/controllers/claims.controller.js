@@ -20,16 +20,21 @@ const OWN_ITEM = "You posted this item, so you can't claim it.";
 const CLOSED = 'This item has already been claimed.';
 // A rejected claim counts as a wrong attempt. After this many, the person can't make
 // new claims in the app and is sent to Campus Security instead.
-const MAX_REJECTED_CLAIMS = 3;
+export const MAX_REJECTED_CLAIMS = 3;
 const LOCKED_OUT = `You've had ${MAX_REJECTED_CLAIMS} claims rejected, so you can't make more claims in the app. Visit Campus Security with proof that the item is yours.`;
 
-// True once this user has had MAX_REJECTED_CLAIMS claims rejected.
+// Locked out once MAX_REJECTED_CLAIMS claims were rejected since Campus Security last
+// unlocked them. An unlock doesn't delete the rejected claims (staff still see them as
+// rejectedBefore); it records how many there were, and only newer ones count.
+export const isLockedOut = (rejected, unlocked = 0) => rejected - unlocked >= MAX_REJECTED_CLAIMS;
+
 async function lockedOut(userId) {
-  const { rows: [{ rejected }] } = await query(
-    "SELECT count(*)::int AS rejected FROM claims WHERE claimant_id = $1 AND status = 'rejected'",
+  const { rows: [{ rejected, unlocked }] } = await query(
+    `SELECT (SELECT count(*)::int FROM claims WHERE claimant_id = $1 AND status = 'rejected') AS rejected,
+            (SELECT unlocked_rejections FROM users WHERE id = $1) AS unlocked`,
     [userId]
   );
-  return rejected >= MAX_REJECTED_CLAIMS;
+  return isLockedOut(rejected, unlocked ?? 0);
 }
 
 // GET /items/:id/questions: what the claim form asks. Question text ONLY; the
@@ -107,7 +112,8 @@ export async function createClaim(req, res) {
 // itemStatus says whether it's still with the finder ('claimed') or at the desk ('dropped off').
 export async function claimsToReview(req, res) {
   const { rows } = await query(
-    `SELECT c.id, c.status, c.item_id AS "itemId", i.status AS "itemStatus", i.title, i.location, i.building, u.school_email AS "claimantEmail",
+    `SELECT c.id, c.status, c.item_id AS "itemId", i.status AS "itemStatus", i.title, i.location, i.building,
+            c.claimant_id AS "claimantId", u.school_email AS "claimantEmail", u.suspended_at IS NOT NULL AS "claimantSuspended",
             json_agg(json_build_object('questionId', q.id, 'question', q.question,
                      'expected', q.expected_answer, 'answer', a.answer) ORDER BY q.id) AS answers,
             (SELECT count(*)::int FROM claims r

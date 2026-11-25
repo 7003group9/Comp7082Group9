@@ -3,6 +3,7 @@ import { STUDENT_EMAIL_DOMAIN, TEST_LOGINS } from "../config/env.js";
 import { issueCode, checkCode, forgetCode } from "../services/loginCodes.js";
 import { sendLoginCode } from "../services/mailer.js";
 import { signToken } from "../services/token.js";
+import { SUSPENDED } from "../services/suspensions.js";
 
 const clean = (v) =>
   String(v ?? "")
@@ -55,9 +56,10 @@ export async function verifyCode(req, res) {
   const { rows } = await query(
     `INSERT INTO users (school_email) VALUES ($1)
      ON CONFLICT (school_email) DO UPDATE SET school_email = EXCLUDED.school_email
-     RETURNING id, role`,
+     RETURNING id, role, suspended_at IS NOT NULL AS suspended`,
     [email],
   );
+  if (rows[0].suspended) return res.status(403).json({ error: SUSPENDED });
   const user = { id: rows[0].id, role: rows[0].role };
   res.json({ token: signToken(user), user: { ...user, school_email: email } });
 }

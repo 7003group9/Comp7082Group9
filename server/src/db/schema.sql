@@ -1,8 +1,13 @@
 CREATE TABLE IF NOT EXISTS users (
   id           SERIAL PRIMARY KEY,
   school_email TEXT UNIQUE,
-  role         TEXT NOT NULL DEFAULT 'student' CHECK (role IN ('student', 'security', 'guest'))
+  role         TEXT NOT NULL DEFAULT 'student' CHECK (role IN ('student', 'security', 'guest')),
+  suspended_at        TIMESTAMPTZ,                       -- set by Campus Security; can't log in or use the app
+  unlocked_rejections INTEGER NOT NULL DEFAULT 0         -- rejected claims forgiven by an unlock (see lockedOut)
 );
+-- For databases made before these columns existed (re-running this file is safe).
+ALTER TABLE users ADD COLUMN IF NOT EXISTS suspended_at TIMESTAMPTZ;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS unlocked_rejections INTEGER NOT NULL DEFAULT 0;
 
 CREATE TABLE IF NOT EXISTS items (
   id                  SERIAL PRIMARY KEY,

@@ -6,6 +6,8 @@ import { issueCode, checkCode, forgetCode } from '../src/services/loginCodes.js'
 import { errorHandler } from '../src/middleware/errorHandler.js';
 import { signToken, verifyToken } from '../src/services/token.js';
 import { BUILDINGS, CATEGORIES, MAX_QUESTIONS, checkItem } from '../src/services/itemValidation.js';
+import { MAX_REJECTED_CLAIMS, isLockedOut } from '../src/controllers/claims.controller.js';
+import { isSuspended, setSuspended } from '../src/services/suspensions.js';
 
 // Starts the app on a free port, runs fn(baseUrl), and always stops it again.
 async function withServer(fn) {
@@ -238,3 +240,47 @@ test('server errors never show internal details to the user', () => {
   // Other foreign key errors (e.g. a deleted item) are still not blamed on the login.
   assert.equal(reply(Object.assign(new Error('fk'), { code: '23503', detail: 'Key (item_id)=(9) is not present in table "items".' })).code, 500);
 });
+
+test('a claimant is locked out after 3 rejected claims, until Campus Security unlocks them', () => {
+  assert.equal(MAX_REJECTED_CLAIMS, 3);
+  assert.equal(isLockedOut(2), false);
+  assert.equal(isLockedOut(3), true);
+  // Unlocked at 3 rejections: those stop counting, and 3 more lock them out again.
+  assert.equal(isLockedOut(3, 3), false);
+  assert.equal(isLockedOut(5, 3), false);
+  assert.equal(isLockedOut(6, 3), true);
+});
+
+test('only Campus Security can see and change locked-out or suspended accounts', () =>
+  withServer(async (base) => {
+    const call = (path, headers, method = 'POST') => status(`${base}/users${path}`, { method, headers });
+    for (const [path, method] of [['/restricted', 'GET'], ['/1/unlock'], ['/1/suspend'], ['/1/unsuspend']]) {
+      assert.equal(await call(path, { 'Content-Type': 'application/json' }, method), 401);
+      assert.equal(await call(path, as('student'), method), 403);
+      assert.equal(await call(path, as('guest'), method), 403);
+    }
+    assert.equal(await call('/abc/suspend', as('security')), 400);
+  }));
+
+test('Campus Security cannot suspend their own account', () =>
+  withServer(async (base) => {
+    const res = await fetch(`${base}/users/1/suspend`, { method: 'POST', headers: as('security') }); // as() is user 1
+    assert.equal(res.status, 400);
+  }));
+
+test('a suspended user is logged out on their next request', () =>
+  withServer(async (base) => {
+    const headers = { Authorization: `Bearer ${signToken({ id: 4242, role: 'student' })}` };
+    setSuspended(4242, true);
+    try {
+      assert.ok(isSuspended(4242));
+      const res = await fetch(`${base}/items/mine`, { headers });
+      assert.equal(res.status, 401); // the app logs them out on a 401
+      assert.equal((await res.json()).suspended, true);
+      // Even the public feed refuses their token, so they're logged out straight away.
+      assert.equal(await status(`${base}/items`, { headers }), 401);
+    } finally {
+      setSuspended(4242, false);
+    }
+    assert.equal(isSuspended(4242), false);
+  }));
