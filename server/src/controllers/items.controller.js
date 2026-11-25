@@ -233,6 +233,8 @@ export async function getPhoto(req, res) {
 export async function createItem(req, res) {
   const photos = req.files ?? [];
   const { item, errors } = checkItem(req.body ?? {}, photos);
+  // New posts need a photo. (Not in checkItem: edits use it too, and they can't change photos.)
+  if (!photos.length) errors.photos ??= 'Add a photo of the item.';
   if (Object.keys(errors).length) return formErrors(res, errors);
 
   // Make the photo copies now so viewing never has to. Bytes that look like
