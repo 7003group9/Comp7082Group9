@@ -1,7 +1,8 @@
-import { useContext, useEffect, useState } from 'react';
+import { useCallback, useContext, useEffect, useState } from 'react';
 import { Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { AuthContext } from '../context/AuthContext';
-import { decideClaim, fetchItem } from '../api/client';
+import { decideClaim, fetchItem, suspendUser } from '../api/client';
+import ErrorRetry from '../components/ErrorRetry';
 import { postedAt, where } from '../components/ItemCard';
 import ItemPhoto from '../components/ItemPhoto';
 import StatusLabel from '../components/StatusLabel';
@@ -10,7 +11,8 @@ import { colors, spacing, type, ui } from '../theme';
 
 
 // One claim opened from Review claims, with what the list doesn't show: the item's
-// details and how many of this claimant's earlier claims were rejected.
+// details and how many of this claimant's earlier claims were rejected. Staff can
+// also suspend the claimant from here (undone on the Locked out & suspended screen).
 export default function ClaimDetailScreen({ route }) {
   const { user } = useContext(AuthContext);
   const [claim, setClaim] = useState(route.params.claim);
@@ -19,9 +21,28 @@ export default function ClaimDetailScreen({ route }) {
   const [error, setError] = useState('');
   const [item, setItem] = useState(null); // null while loading, false if it failed
 
+  const loadItem = useCallback(
+    () => fetchItem(claim.itemId).then(setItem).catch(() => setItem(false)),
+    [claim.itemId]
+  );
   useEffect(() => {
-    fetchItem(claim.itemId).then(setItem).catch(() => setItem(false));
-  }, [claim.itemId]);
+    loadItem();
+  }, [loadItem]);
+
+  async function onSuspend() {
+    if (confirm !== 'suspend') return setConfirm('suspend');
+    setError('');
+    setBusy(true);
+    try {
+      await suspendUser(claim.claimantId, user.token);
+      setClaim((c) => ({ ...c, claimantSuspended: true }));
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setBusy(false);
+      setConfirm(null);
+    }
+  }
 
   async function onDecide(decision) {
     if (confirm !== decision) return setConfirm(decision);
@@ -80,7 +101,11 @@ export default function ClaimDetailScreen({ route }) {
           <ItemPhoto itemId={claim.itemId} title={claim.title} />
         </>
       ) : (
-        <Text style={type.meta}>{item === false ? "Couldn't load the item's details." : 'Loading item details...'}</Text>
+        item === false ? (
+          <ErrorRetry message="Couldn't load the item's details." onRetry={loadItem} />
+        ) : (
+          <Text style={type.meta}>Loading item details...</Text>
+        )
       )}
 
       <Text style={styles.section}>Claimant</Text>
@@ -90,6 +115,21 @@ export default function ClaimDetailScreen({ route }) {
           ? `${claim.rejectedBefore} earlier claim${claim.rejectedBefore === 1 ? '' : 's'} rejected`
           : 'No earlier claims rejected'}
       </Text>
+      {claim.claimantSuspended ? (
+        <Text style={styles.warn}>Account suspended</Text>
+      ) : (
+        <Pressable
+          style={[styles.suspend, confirm === 'suspend' && { backgroundColor: colors.danger }]}
+          onPress={onSuspend}
+          disabled={busy}
+          accessibilityRole="button"
+          accessibilityLabel={`Suspend ${claim.claimantEmail}`}
+        >
+          <Text style={[ui.actionText, { color: confirm === 'suspend' ? colors.onAccent : colors.danger }]}>
+            {confirm === 'suspend' ? 'Tap again to suspend' : 'Suspend account'}
+          </Text>
+        </Pressable>
+      )}
 
       <Text style={styles.section}>Answers</Text>
       {claim.answers.map((a, i) => (
@@ -124,4 +164,5 @@ const styles = StyleSheet.create({
   error: { color: colors.danger, marginTop: spacing.md },
   saved: { ...type.body, fontWeight: '600', color: colors.accent, marginTop: spacing.lg },
   actions: { marginTop: spacing.lg },
+  suspend: { borderWidth: 2, borderColor: colors.danger, borderRadius: 8, paddingVertical: spacing.xs, paddingHorizontal: spacing.md, marginTop: spacing.sm, alignSelf: 'flex-start' },
 });

@@ -13,8 +13,9 @@ export async function fetchPhotoUrl(itemId, token, thumb = false) {
   return URL.createObjectURL(await res.blob());
 }
 
-// Called when the server rejects our login token (expired or invalid) so the
-// app can send the user back to the login screen. AuthProvider sets it.
+// Called when the server rejects our login token (expired, invalid, or the account was
+// suspended) so the app can send the user back to the login screen, with the server's
+// reason when it gave one. AuthProvider sets it.
 let onSessionExpired = () => {};
 export const setSessionExpiredHandler = (fn) => {
   onSessionExpired = fn;
@@ -27,18 +28,26 @@ export const setSessionExpiredHandler = (fn) => {
 async function send(method, path, body, token) {
   if (!API_URL) throw new Error("API URL is not configured");
   const form = body instanceof FormData; // the browser sets the multipart header itself
-  const res = await fetch(`${API_URL}${path}`, {
-    method,
-    headers: {
-      ...(!form && { "Content-Type": "application/json" }),
-      ...(token && { Authorization: `Bearer ${token}` }),
-    },
-    body: form ? body : body && JSON.stringify(body),
-  });
+  let res;
+  try {
+    res = await fetch(`${API_URL}${path}`, {
+      method,
+      headers: {
+        ...(!form && { "Content-Type": "application/json" }),
+        ...(token && { Authorization: `Bearer ${token}` }),
+      },
+      body: form ? body : body && JSON.stringify(body),
+    });
+  } catch {
+    // No reply at all: offline, or the server is down. (The browser only says "Failed to fetch".)
+    throw Object.assign(new Error("Can't reach the server. Check your connection and try again."), { retry: true });
+  }
   const data = await res.json().catch(() => ({}));
-  if (res.status === 401 && token) onSessionExpired(); // we sent a token and it was refused
+  if (res.status === 401 && token) onSessionExpired(data?.suspended ? data.error : null); // we sent a token and it was refused
   if (!res.ok) {
-    throw Object.assign(new Error(data?.error || `Request failed (${res.status})`), { fields: data?.fields });
+    // retry: trying again later could work (server error or too many attempts), unlike e.g. a 403.
+    const retry = res.status >= 500 || res.status === 429;
+    throw Object.assign(new Error(data?.error || `Request failed (${res.status})`), { fields: data?.fields, retry });
   }
   return data;
 }
@@ -133,9 +142,23 @@ export const markHandedOff = (itemId, token) => post(`/items/${itemId}/handed-of
 // pickedUpBy, pickedUpAt and handedOverBy.
 export const fetchHistory = (token) => send("GET", "/items/history", undefined, token);
 
+// Campus Security only: change an item's status by hand ('dropped off', 'handed off', or
+// back to 'claimed' to undo a mistaken "received"). The server only allows those changes.
+export const setItemStatus = (itemId, status, token) => send("PATCH", `/items/${itemId}/status`, { status }, token);
+
 // Delete one of your own posts.
 export const deleteItem = (id, token) => send("DELETE", `/items/${id}`, undefined, token);
 
+// Campus Security only: accounts that are locked out of claiming (3 rejected claims since
+// their last unlock) or suspended: [{ id, email, role, suspendedAt, rejected, locked }].
+export const fetchRestrictedUsers = (token) => send("GET", "/users/restricted", undefined, token);
+
+// Campus Security only: let a locked-out person claim again (their old rejections stop counting).
+export const unlockUser = (userId, token) => post(`/users/${userId}/unlock`, undefined, token);
+
+// Campus Security only: suspend an account (logged out, can't log back in) or restore it.
+export const suspendUser = (userId, token) => post(`/users/${userId}/suspend`, undefined, token);
+export const unsuspendUser = (userId, token) => post(`/users/${userId}/unsuspend`, undefined, token);
 // Reporting and Campus Security moderation.
 export const reportItem = (id, reason, details, token) =>
   post(`/items/${id}/report`, { reason, details }, token);

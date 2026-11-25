@@ -18,6 +18,7 @@ import ItemCard from "../components/ItemCard";
 import PostButton from "../components/PostButton";
 import SearchBar from "../components/SearchBar";
 import FilterPanel from "../components/FilterPanel";
+import ErrorRetry from "../components/ErrorRetry";
 import { colors, spacing, type, ui } from "../theme";
 
 // Filled bell (Material "notifications" icon) in the button text colour. The 🕭
@@ -225,9 +226,7 @@ export default function HomeScreen({ navigation }) {
         />
       ) : null}
       {/* A failed refresh while items are on screen: say so instead of failing silently. */}
-      {error && items.length ? (
-        <Text style={styles.banner}>{error}. Pull down to try again.</Text>
-      ) : null}
+      {error && items.length ? <ErrorRetry message={error} onRetry={loadFirst} style={styles.retry} /> : null}
     </View>
   );
 
@@ -236,11 +235,7 @@ export default function HomeScreen({ navigation }) {
   if (loading)
     empty = <ActivityIndicator style={styles.center} color={colors.accent} />;
   else if (error)
-    empty = (
-      <Text style={[type.body, styles.center]}>
-        {error}. Pull down to try again.
-      </Text>
-    );
+    empty = <ErrorRetry message={error} onRetry={loadFirst} style={styles.retry} />;
   else
     empty = (
       <View style={styles.center}>
@@ -307,7 +302,7 @@ const styles = StyleSheet.create({
   title: { ...type.title, marginBottom: spacing.xs },
   center: { marginTop: spacing.xl, textAlign: "center", color: colors.slate },
   more: { marginVertical: spacing.md },
-  banner: { color: colors.danger, marginTop: spacing.md },
+  retry: { marginTop: spacing.md },
   // Title on its own line, buttons underneath, so they don't crowd each other.
   topRow: {
     alignItems: "flex-start",

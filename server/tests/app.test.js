@@ -1,5 +1,6 @@
 // Run with `npm test` (Node's built-in test runner, no extra packages).
 import test from 'node:test';
+import { spawnSync } from 'node:child_process';
 import assert from 'node:assert/strict';
 import app from '../src/app.js';
 import { pool } from '../src/config/db.js';
@@ -7,6 +8,10 @@ import { issueCode, checkCode, forgetCode } from '../src/services/loginCodes.js'
 import { errorHandler } from '../src/middleware/errorHandler.js';
 import { signToken, verifyToken } from '../src/services/token.js';
 import { BUILDINGS, CATEGORIES, MAX_QUESTIONS, checkItem } from '../src/services/itemValidation.js';
+import { MAX_REJECTED_CLAIMS, isLockedOut } from '../src/controllers/claims.controller.js';
+import { STATUS_CHANGES } from '../src/controllers/items.controller.js';
+import { rateLimit, resetRateLimits } from '../src/middleware/rateLimit.js';
+import { isSuspended, setSuspended } from '../src/services/suspensions.js';
 
 // Starts the app on a free port, runs fn(baseUrl), and always stops it again.
 async function withServer(fn) {
@@ -400,3 +405,132 @@ test('server errors never show internal details to the user', () => {
   // Other foreign key errors (e.g. a deleted item) are conflicts, not login failures.
   assert.equal(reply(Object.assign(new Error('fk'), { code: '23503', detail: 'Key (item_id)=(9) is not present in table "items".' })).code, 409);
 });
+
+test('a claimant is locked out after 3 rejected claims, until Campus Security unlocks them', () => {
+  assert.equal(MAX_REJECTED_CLAIMS, 3);
+  assert.equal(isLockedOut(2), false);
+  assert.equal(isLockedOut(3), true);
+  // Unlocked at 3 rejections: those stop counting, and 3 more lock them out again.
+  assert.equal(isLockedOut(3, 3), false);
+  assert.equal(isLockedOut(5, 3), false);
+  assert.equal(isLockedOut(6, 3), true);
+});
+
+test('only Campus Security can see and change locked-out or suspended accounts', () =>
+  withServer(async (base) => {
+    const call = (path, headers, method = 'POST') => status(`${base}/users${path}`, { method, headers });
+    for (const [path, method] of [['/restricted', 'GET'], ['/1/unlock'], ['/1/suspend'], ['/1/unsuspend']]) {
+      assert.equal(await call(path, { 'Content-Type': 'application/json' }, method), 401);
+      assert.equal(await call(path, as('student'), method), 403);
+      assert.equal(await call(path, as('guest'), method), 403);
+    }
+    assert.equal(await call('/abc/suspend', as('security')), 400);
+  }));
+
+test('Campus Security cannot suspend their own account', () =>
+  withServer(async (base) => {
+    const res = await fetch(`${base}/users/1/suspend`, { method: 'POST', headers: as('security') }); // as() is user 1
+    assert.equal(res.status, 400);
+  }));
+
+test('a suspended user is logged out on their next request', () =>
+  withServer(async (base) => {
+    const headers = { Authorization: `Bearer ${signToken({ id: 4242, role: 'student' })}` };
+    setSuspended(4242, true);
+    try {
+      assert.ok(isSuspended(4242));
+      const res = await fetch(`${base}/items/mine`, { headers });
+      assert.equal(res.status, 401); // the app logs them out on a 401
+      assert.equal((await res.json()).suspended, true);
+      // Even the public feed refuses their token, so they're logged out straight away.
+      assert.equal(await status(`${base}/items`, { headers }), 401);
+    } finally {
+      setSuspended(4242, false);
+    }
+    assert.equal(isSuspended(4242), false);
+  }));
+
+test('Campus Security can only make the allowed status changes by hand', () => {
+  assert.deepEqual(STATUS_CHANGES.claimed, ['dropped off']);
+  assert.deepEqual([...STATUS_CHANGES['dropped off']].sort(), ['claimed', 'handed off']);
+  // Claims decide these, and a handed-off item is final.
+  for (const from of ['open', 'claim pending', 'handed off']) assert.equal(STATUS_CHANGES[from], undefined);
+});
+
+test('only Campus Security can change an item status', () =>
+  withServer(async (base) => {
+    const change = (id, headers) =>
+      status(`${base}/items/${id}/status`, { method: 'PATCH', headers, body: JSON.stringify({ status: 'dropped off' }) });
+    assert.equal(await change(1, { 'Content-Type': 'application/json' }), 401);
+    assert.equal(await change(1, as('student')), 403);
+    assert.equal(await change(1, as('guest')), 403);
+    assert.equal(await change('abc', as('security')), 400);
+  }));
+
+test('the 6th login attempt in a minute gets 429', () =>
+  withServer(async (base) => {
+    resetRateLimits();
+    const tryCode = () =>
+      status(`${base}/auth/verify-code`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: 'x@my.bcit.ca', code: '000000', challenge: 'nope' }),
+      });
+    for (let i = 0; i < 5; i++) assert.equal(await tryCode(), 401); // wrong code, but allowed to try
+    assert.equal(await tryCode(), 429);
+    resetRateLimits();
+  }));
+
+test('rate limits are per person and reset after the minute', () => {
+  resetRateLimits();
+  let now = 1_000_000;
+  const realNow = Date.now;
+  Date.now = () => now;
+  try {
+    const limit = rateLimit('test', { key: (req) => req.who });
+    const call = (who) => {
+      let code = 200;
+      limit({ who }, { set() {}, status: (c) => ((code = c), { json() {} }) }, () => {});
+      return code;
+    };
+    for (let i = 0; i < 5; i++) assert.equal(call('a'), 200);
+    assert.equal(call('a'), 429);
+    assert.equal(call('b'), 200); // someone else isn't affected
+    now += 60 * 1000; // a minute later
+    assert.equal(call('a'), 200);
+  } finally {
+    Date.now = realNow;
+    resetRateLimits();
+  }
+});
+
+test('the server refuses to start in production with the public default token secret', () => {
+  const start = (secret) =>
+    spawnSync(process.execPath, ['-e', "import('./src/config/env.js')"], {
+      env: { PATH: process.env.PATH, NODE_ENV: 'production', ...(secret && { JWT_SECRET: secret }) },
+    }).status;
+  assert.notEqual(start(), 0); // not set: would use 'dev-secret'
+  assert.notEqual(start('change-me'), 0); // the value from .env.example
+  assert.notEqual(start('too-short'), 0);
+  assert.equal(start('x'.repeat(40)), 0); // a real secret is fine
+});
+
+test('login emails with a "+" alias are refused', () =>
+  withServer(async (base) => {
+    resetRateLimits();
+    const res = await fetch(`${base}/auth/request-code`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: 'bob+again@my.bcit.ca' }),
+    });
+    assert.equal(res.status, 400);
+    resetRateLimits();
+  }));
+
+test('guests cannot report posts', () =>
+  withServer(async (base) => {
+    const report = (headers) =>
+      status(`${base}/items/1/report`, { method: 'POST', headers, body: JSON.stringify({ reason: 'Spam' }) });
+    assert.equal(await report({ 'Content-Type': 'application/json' }), 401);
+    assert.equal(await report(as('guest')), 403);
+  }));

@@ -13,6 +13,7 @@ import {
 import { where } from '../components/ItemCard';
 import StatusLabel from '../components/StatusLabel';
 import { useConfirm, useFocusList } from '../hooks';
+import ErrorRetry from '../components/ErrorRetry';
 import { colors, spacing, type, ui } from '../theme';
 
 // Campus Security only: pending claims, each answer beside the finder's expected
@@ -22,7 +23,7 @@ import { colors, spacing, type, ui } from '../theme';
 // Every button needs a second tap, since each step is final.
 export default function SecurityDashboardScreen({ navigation }) {
   const { user } = useContext(AuthContext);
-  const { list: claims, setList: setClaims, loading, error, setError } = useFocusList(
+  const { list: claims, setList: setClaims, loading, error, setError, failed, reload } = useFocusList(
     useCallback(() => fetchClaimsToReview(user.token), [user.token])
   );
   const [confirm, setConfirm] = useConfirm(); // "<claim id>:<decision>" waiting for a second tap
@@ -113,14 +114,27 @@ export default function SecurityDashboardScreen({ navigation }) {
       keyExtractor={(c) => String(c.id)}
       ListHeaderComponent={
         <>
-          <Pressable
-            style={({ pressed }) => [ui.smallButton, styles.history, pressed && ui.pressed]}
-            onPress={() => navigation.navigate('History')}
-            accessibilityRole="button"
-          >
-            <Text style={ui.smallButtonText}>Past posts</Text>
-          </Pressable>
-          {error ? <Text style={styles.error}>{error}</Text> : null}
+          <View style={styles.links}>
+            <Pressable
+              style={({ pressed }) => [ui.smallButton, pressed && ui.pressed]}
+              onPress={() => navigation.navigate('History')}
+              accessibilityRole="button"
+            >
+              <Text style={ui.smallButtonText}>Past posts</Text>
+            </Pressable>
+            <Pressable
+              style={({ pressed }) => [ui.smallButton, pressed && ui.pressed]}
+              onPress={() => navigation.navigate('Accounts')}
+              accessibilityRole="button"
+            >
+              <Text style={ui.smallButtonText}>Locked out & suspended</Text>
+            </Pressable>
+          </View>
+          {failed ? (
+            <ErrorRetry message={error} onRetry={reload} />
+          ) : error ? (
+            <Text style={styles.error}>{error}</Text>
+          ) : null}
           {reportsError ? <Text style={styles.error}>{reportsError}</Text> : null}
           <Text style={styles.reportHeading}>Reported posts</Text>
           {reportsLoading ? (
@@ -223,7 +237,7 @@ const styles = StyleSheet.create({
   gap: { marginTop: spacing.xs },
   qa: { marginTop: spacing.md, gap: 2 },
   question: { ...type.body, fontWeight: '600' },
-  history: { marginBottom: spacing.md },
+  links: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginBottom: spacing.md },
   approved: { ...type.body, fontWeight: '600', color: colors.accent, marginTop: spacing.md },
   details: { color: colors.accent, fontWeight: '600', marginTop: spacing.sm },
   reportHeading: { ...type.heading, marginTop: spacing.md, marginBottom: spacing.sm },

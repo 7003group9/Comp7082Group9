@@ -17,7 +17,7 @@ function readSavedUser() {
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(readSavedUser);
-  const [expired, setExpired] = useState(false); // true after the server rejected our token
+  const [expired, setExpired] = useState(false); // after the server rejected our token: true, or its reason (e.g. suspended)
 
   function login(userData) {
     try {
@@ -42,9 +42,9 @@ export function AuthProvider({ children }) {
   // If any request comes back 401 (expired or invalid login), log out so the
   // app shows the login screen with a note, instead of a confusing error.
   useEffect(() => {
-    setSessionExpiredHandler(() => {
+    setSessionExpiredHandler((reason) => {
       logout(false);
-      setExpired(true);
+      setExpired(reason || true);
     });
   }, []);
 

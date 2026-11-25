@@ -48,14 +48,22 @@ export function useFocusList(load) {
   const [list, setList] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [failed, setFailed] = useState(false); // the list itself didn't load (show Try again)
+  const reload = useCallback(() => {
+    setError('');
+    setFailed(false);
+    return load()
+      .then(setList)
+      .catch((e) => {
+        setError(e.message);
+        setFailed(true);
+      })
+      .finally(() => setLoading(false));
+  }, [load]);
   useFocusEffect(
     useCallback(() => {
-      setError('');
-      load()
-        .then(setList)
-        .catch((e) => setError(e.message))
-        .finally(() => setLoading(false));
-    }, [load])
+      reload();
+    }, [reload])
   );
-  return { list, setList, loading, error, setError };
+  return { list, setList, loading, error, setError, failed, reload };
 }

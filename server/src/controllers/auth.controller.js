@@ -3,13 +3,16 @@ import { STUDENT_EMAIL_DOMAIN, TEST_LOGINS } from "../config/env.js";
 import { issueCode, checkCode, forgetCode } from "../services/loginCodes.js";
 import { sendLoginCode } from "../services/mailer.js";
 import { signToken } from "../services/token.js";
+import { SUSPENDED } from "../services/suspensions.js";
 
 const clean = (v) =>
   String(v ?? "")
     .trim()
     .toLowerCase();
+// No "+": school email delivers name+anything@ to name@, so it would give one person
+// endless accounts and get around a suspension or the 3-rejection lockout.
 const isStudentEmail = (e) =>
-  /^[^@\s]+@[^@\s]+$/.test(e) && e.endsWith(`@${STUDENT_EMAIL_DOMAIN}`);
+  /^[^@\s+]+@[^@\s]+$/.test(e) && e.endsWith(`@${STUDENT_EMAIL_DOMAIN}`);
 
 // Step 1: POST /auth/request-code { email } -> emails a 6-digit code and
 // replies { ok, challenge }. The app must send the challenge back with the code.
@@ -55,9 +58,10 @@ export async function verifyCode(req, res) {
   const { rows } = await query(
     `INSERT INTO users (school_email) VALUES ($1)
      ON CONFLICT (school_email) DO UPDATE SET school_email = EXCLUDED.school_email
-     RETURNING id, role`,
+     RETURNING id, role, suspended_at IS NOT NULL AS suspended`,
     [email],
   );
+  if (rows[0].suspended) return res.status(403).json({ error: SUSPENDED });
   const user = { id: rows[0].id, role: rows[0].role };
   res.json({ token: signToken(user), user: { ...user, school_email: email } });
 }

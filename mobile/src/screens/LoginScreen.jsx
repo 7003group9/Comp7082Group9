@@ -54,7 +54,7 @@ export default function LoginScreen() {
       <Text style={type.title}>Campus Claim</Text>
       {expired && !codeSent ? (
         <Text style={styles.expired}>
-          Your session expired. Please log in again.
+          {typeof expired === "string" ? expired : "Your session expired. Please log in again."}
         </Text>
       ) : null}
       <Text style={styles.hint}>

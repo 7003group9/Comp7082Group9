@@ -5,13 +5,14 @@ import { deleteItem, fetchMyItems } from "../api/client";
 import { age, where } from "../components/ItemCard";
 import StatusLabel from "../components/StatusLabel";
 import { useConfirm, useFocusList } from "../hooks";
+import ErrorRetry from "../components/ErrorRetry";
 import { colors, spacing, type, ui } from "../theme";
 
 // The items I posted. Edit and Delete only while nobody has claimed them; after
 // that, what to do next (drop it off, or nothing). Campus Security reviews the claims.
 export default function MyListingsScreen({ navigation }) {
   const { user } = useContext(AuthContext);
-  const { list: items, setList: setItems, loading, error, setError } = useFocusList(
+  const { list: items, setList: setItems, loading, error, setError, failed, reload } = useFocusList(
     useCallback(() => fetchMyItems(user.token), [user.token]),
   );
   const [confirmId, setConfirmId] = useConfirm(); // item waiting for a second tap
@@ -41,7 +42,9 @@ export default function MyListingsScreen({ navigation }) {
       contentContainerStyle={styles.list}
       data={items}
       keyExtractor={(i) => String(i.id)}
-      ListHeaderComponent={error ? <Text style={styles.error}>{error}</Text> : null}
+      ListHeaderComponent={
+        failed ? <ErrorRetry message={error} onRetry={reload} /> : error ? <Text style={styles.error}>{error}</Text> : null
+      }
       // After a failed load the error above says what happened; "no posts" would be untrue.
       ListEmptyComponent={error ? null : <Text style={[type.body, styles.empty]}>You haven't posted anything yet.</Text>}
       renderItem={({ item }) => (
