@@ -1,17 +1,48 @@
-import { useCallback, useContext } from 'react';
-import { ActivityIndicator, FlatList, StyleSheet, Text, View } from 'react-native';
+import { useCallback, useContext, useState } from 'react';
+import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { AuthContext } from '../context/AuthContext';
-import { fetchHistory } from '../api/client';
+import { fetchHistory, setItemStatus } from '../api/client';
 import { postedAt, where } from '../components/ItemCard';
 import StatusLabel from '../components/StatusLabel';
-import { useFocusList } from '../hooks';
+import { useConfirm, useFocusList } from '../hooks';
 import { colors, spacing, type, ui } from '../theme';
+
+// What each status can be changed to by hand, and what the option says. Same rules as
+// STATUS_CHANGES on the server (which checks them again).
+const STATUS_OPTIONS = {
+  claimed: [['dropped off', 'Received at the security desk']],
+  'dropped off': [
+    ['handed off', 'Picked up by owner'],
+    ['claimed', 'Not received yet (undo)'],
+  ],
+};
 
 // Campus Security only: every post, newest first, with who found it and, once
 // collected, who picked it up, when, and which staff member handed it over.
+// Items waiting on the desk have a status dropdown; each choice needs a second tap.
 export default function HistoryScreen() {
   const { user } = useContext(AuthContext);
-  const { list: items, loading, error } = useFocusList(useCallback(() => fetchHistory(user.token), [user.token]));
+  const load = useCallback(() => fetchHistory(user.token), [user.token]);
+  const { list: items, setList: setItems, loading, error, setError } = useFocusList(load);
+  const [openId, setOpenId] = useState(null); // the item whose dropdown is open
+  const [confirm, setConfirm] = useConfirm(); // "<item id>:<status>" waiting for a second tap
+  const [busyId, setBusyId] = useState(null);
+
+  async function choose(item, status) {
+    if (confirm !== `${item.id}:${status}`) return setConfirm(`${item.id}:${status}`);
+    setError('');
+    setBusyId(item.id);
+    try {
+      await setItemStatus(item.id, status, user.token);
+      setItems(await load()); // reload, so pick-up details show up too
+      setOpenId(null);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setBusyId(null);
+      setConfirm(null);
+    }
+  }
 
   if (loading) return <ActivityIndicator style={styles.center} color={colors.accent} />;
 
@@ -32,6 +63,33 @@ export default function HistoryScreen() {
           </Text>
           {/* Same wording as the finder sees, so 'Dropped off' = waiting at the desk. */}
           <StatusLabel item={item} mine />
+          {STATUS_OPTIONS[item.status] ? (
+            <>
+              <Pressable
+                onPress={() => setOpenId(openId === item.id ? null : item.id)}
+                accessibilityRole="button"
+                accessibilityLabel={`Change status of ${item.title}`}
+              >
+                <Text style={styles.change}>Change status {openId === item.id ? '▴' : '▾'}</Text>
+              </Pressable>
+              {openId === item.id
+                ? STATUS_OPTIONS[item.status].map(([status, label]) => {
+                    const armed = confirm === `${item.id}:${status}`;
+                    return (
+                      <Pressable
+                        key={status}
+                        style={[styles.option, armed && styles.armed]}
+                        onPress={() => choose(item, status)}
+                        disabled={busyId === item.id}
+                        accessibilityRole="button"
+                      >
+                        <Text style={[type.body, armed && styles.armedText]}>{armed ? 'Tap again to confirm' : label}</Text>
+                      </Pressable>
+                    );
+                  })
+                : null}
+            </>
+          ) : null}
           {item.pickedUpAt ? (
             <Text style={styles.pickup}>
               Picked up by {item.pickedUpBy} on {postedAt(item.pickedUpAt)}
@@ -53,4 +111,8 @@ const styles = StyleSheet.create({
   error: { color: colors.danger, marginBottom: spacing.md },
   card: { ...ui.card, padding: spacing.md, marginBottom: spacing.md, gap: 2 },
   pickup: { ...type.body, fontWeight: '600', marginTop: spacing.sm },
+  change: { color: colors.accent, fontWeight: '600', marginTop: spacing.sm },
+  option: { borderWidth: 2, borderColor: colors.accent, borderRadius: 8, padding: spacing.sm, marginTop: spacing.xs },
+  armed: { backgroundColor: colors.accent },
+  armedText: { color: colors.onAccent, fontWeight: '700' },
 });

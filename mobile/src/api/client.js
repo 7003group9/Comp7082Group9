@@ -134,6 +134,10 @@ export const markHandedOff = (itemId, token) => post(`/items/${itemId}/handed-of
 // pickedUpBy, pickedUpAt and handedOverBy.
 export const fetchHistory = (token) => send("GET", "/items/history", undefined, token);
 
+// Campus Security only: change an item's status by hand ('dropped off', 'handed off', or
+// back to 'claimed' to undo a mistaken "received"). The server only allows those changes.
+export const setItemStatus = (itemId, status, token) => send("PATCH", `/items/${itemId}/status`, { status }, token);
+
 // Delete one of your own posts.
 export const deleteItem = (id, token) => send("DELETE", `/items/${id}`, undefined, token);
 
