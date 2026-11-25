@@ -6,7 +6,6 @@ import {
   CATEGORIES,
   MAX_OPEN_POSTS,
   MAX_QUESTIONS,
-  PHOTO_TYPES,
   checkItem,
   clean,
   coord,
@@ -48,7 +47,7 @@ const likePattern = (s) => `%${s.replace(/[\\%_]/g, "\\$&")}%`;
 // - anyone else's claimed (or dropped-off) item for 24 hours after the claim was approved;
 // - open and claim-pending items.
 // myClaim is the viewer's own claim status on each item ('pending', 'approved',
-// 'rejected'), or null if they haven't claimed it or aren't logged in.
+// 'rejected', 'post hidden'), or null if they haven't claimed it or aren't logged in.
 export async function listItems(req, res) {
   const me = userFrom(req)?.id ?? null;
   const q = clean(req.query.q, 100);
@@ -94,7 +93,12 @@ export async function listItems(req, res) {
        AND ($5::date IS NULL OR (created_at AT TIME ZONE 'America/Vancouver')::date >= $5::date)
        AND ($6::date IS NULL OR (created_at AT TIME ZONE 'America/Vancouver')::date <= $6::date)
        AND ($7::int IS NULL OR finder_id <> $7)
-       AND is_hidden = FALSE
+       -- Hidden posts only show to people whose claim the hide closed, for 24 hours,
+       -- so they find out why (their card says "Removed by Campus Security").
+       AND (is_hidden = FALSE
+            OR (hidden_at > now() - interval '24 hours'
+                AND EXISTS (SELECT 1 FROM claims c WHERE c.item_id = items.id
+                            AND c.claimant_id = $7 AND c.status = 'post hidden')))
      ORDER BY id DESC LIMIT $8`,
     [
       before,
@@ -178,33 +182,36 @@ export async function editItem(req, res) {
   res.json(updated);
 }
 
-// The two small copies of an uploaded photo, as WebP (keeps PNG transparency, smaller than JPEG).
+// The three copies of an uploaded photo that get stored (the upload itself is not), as
+// WebP (keeps PNG transparency, smaller than JPEG). sharp leaves out the upload's
+// metadata, so the finder's GPS location and phone model are never stored or sent.
 // rotate() first: phones store photos sideways with an "up is this way" tag that the
 // browser follows but the copies would lose, so the pixels are turned upright.
+// large: clear, up to 1280px (sharper than any phone shows it; never enlarged).
 // thumb: clear, 192px (sharp on the 96px feed card on high-res screens).
 // blurred: shrunk to 400px BEFORE blurring, so fine detail (stickers, writing) is gone
-// and the blur is equally strong whatever size the original was.
+// and the blur is equally strong whatever size the upload was.
 const photoVersions = async (buffer) => {
   const upright = sharp(buffer).rotate();
-  const [thumb, blurred] = await Promise.all([
+  const [large, thumb, blurred] = await Promise.all([
+    upright.clone().resize(1280, 1280, { fit: "inside", withoutEnlargement: true }).webp({ quality: 80 }).toBuffer(),
     upright.clone().resize(192, 192, { fit: "inside" }).webp({ quality: 80 }).toBuffer(),
     upright.clone().resize(400, 400, { fit: "inside" }).blur(12).webp({ quality: 70 }).toBuffer(),
   ]);
-  return { thumb, blurred };
+  return { large, thumb, blurred };
 };
 
 // GET /items/:id/photo: the item's photo as an image. The finder, Campus Security and
 // the owner (once their claim is approved) get it clear; everyone else gets a small blurred copy, so the photo can't give away
 // answers to the private questions. Login is optional (Authorization header).
-// ?size=thumb gets the finder and Campus Security a small clear copy (for feed cards)
-// instead of the full original.
+// ?size=thumb gets them a small clear copy (for feed cards) instead of the large one.
 export async function getPhoto(req, res) {
   const viewer = userFrom(req);
-  // Only the chosen version is read from the database, so a thumbnail never loads the original.
+  // Only the chosen copy is read from the database: big columns are only fetched when a
+  // query returns them, so the outer SELECT must return nothing but the CASE.
   const { rows } = await query(
-    `SELECT mime_type, original, clear, original_data,
-            CASE WHEN NOT clear THEN blurred WHEN original THEN data ELSE thumb END AS data
-     FROM (SELECT p.*, p.data AS original_data, NOT $4 AS original,
+    `SELECT CASE WHEN NOT clear THEN blurred WHEN thumb_only THEN thumb ELSE large END AS data
+     FROM (SELECT p.large, p.thumb, p.blurred, $4::boolean AS thumb_only,
                   (items.finder_id = $2 OR $3 OR EXISTS (
                      SELECT 1 FROM claims c
                      WHERE c.item_id = items.id AND c.claimant_id = $2 AND c.status = 'approved'
@@ -213,34 +220,15 @@ export async function getPhoto(req, res) {
            WHERE p.item_id = $1 ORDER BY p.id LIMIT 1) photo`,
     [req.params.id, viewer?.id ?? null, viewer?.role === "security", req.query.size === "thumb"],
   );
-  const photo = rows[0];
-  if (!photo) return res.status(404).json({ error: "No photo for this item" });
-  let { data } = photo;
-  if (!data && photo.original_data) {
-    const image = sharp(photo.original_data);
-    if (!photo.clear) {
-      data = await image.resize(400, 400, { fit: "inside" }).blur(12).webp({ quality: 70 }).toBuffer();
-    } else if (!photo.original) {
-      data = await image.resize(192, 192, { fit: "inside" }).webp({ quality: 80 }).toBuffer();
-    } else {
-      data = photo.original_data;
-    }
-  }
-  if (!data) return res.status(404).json({ error: "No photo for this item" });
+  if (!rows[0]) return res.status(404).json({ error: "No photo for this item" });
 
-  // The made-at-upload versions are WebP. Uploads only allow PHOTO_TYPES, but check
-  // the original's type again so a bad row can never be served as HTML/SVG.
-  let type = "image/webp";
-  if (photo.clear && photo.original) {
-    type = PHOTO_TYPES.includes(photo.mime_type) ? photo.mime_type : "application/octet-stream";
-  }
   // The answer depends on who is asking, so only the viewer's own browser may cache it,
   // and it must check back each time (an approved claim switches blurred to clear).
   // Express's ETag makes an unchanged photo a quick 304.
   res
     .set({ "Cache-Control": "private, no-cache", Vary: "Authorization", "X-Content-Type-Options": "nosniff" })
-    .type(type)
-    .send(data);
+    .type("image/webp") // every stored copy is WebP, made by sharp
+    .send(rows[0].data);
 }
 
 // POST /items  { title, category, location, building?, latitude, longitude, questions: [{ question, answer }] }
@@ -253,7 +241,7 @@ export async function createItem(req, res) {
   const { item, errors } = checkItem(req.body ?? {}, photos);
   if (Object.keys(errors).length) return formErrors(res, errors);
 
-  // The small versions, made once here so viewing never has to. Bytes that look like
+  // The stored copies, made once here so viewing never has to. Bytes that look like
   // an image but can't be decoded get the same 400 as any other bad photo.
   let versions;
   try {
@@ -296,9 +284,9 @@ export async function createItem(req, res) {
        INSERT INTO item_questions (item_id, question, expected_answer)
        SELECT item.id, t.q, t.a FROM item, unnest($8::text[], $9::text[]) AS t(q, a)
      ), imgs AS (
-       INSERT INTO item_images (item_id, mime_type, data, thumb, blurred)
-       SELECT item.id, t.m, t.d, t.th, t.bl
-       FROM item, unnest($10::text[], $11::bytea[], $12::bytea[], $13::bytea[]) AS t(m, d, th, bl)
+       INSERT INTO item_images (item_id, large, thumb, blurred)
+       SELECT item.id, t.lg, t.th, t.bl
+       FROM item, unnest($10::bytea[], $11::bytea[], $12::bytea[]) AS t(lg, th, bl)
      )
      SELECT * FROM item`,
     [
@@ -311,8 +299,7 @@ export async function createItem(req, res) {
       longitude,
       questions.map((q) => q.question),
       questions.map((q) => q.answer),
-      photos.map((p) => p.mimetype),
-      photos.map((p) => p.buffer),
+      versions.map((v) => v.large),
       versions.map((v) => v.thumb),
       versions.map((v) => v.blurred),
     ],
@@ -320,10 +307,10 @@ export async function createItem(req, res) {
   res.status(201).json(rows[0]);
 }
 
-// GET /items/mine: everything the logged-in user posted.
+// GET /items/mine: everything the logged-in user posted. hidden: Campus Security hid it.
 export async function listMine(req, res) {
   const { rows } = await query(
-    `SELECT ${PUBLIC_FIELDS} FROM items
+    `SELECT ${PUBLIC_FIELDS}, is_hidden AS hidden FROM items
      WHERE finder_id = $1 ORDER BY id DESC`,
     [req.user.id],
   );
@@ -489,12 +476,13 @@ export async function setStatus(req, res) {
   res.json(rows[0]);
 }
 
-// GET /items/history (security only): every post, newest first, with who found it and,
+// GET /items/history (security only): every post (hidden ones too, with hidden: true so
+// staff can unhide them), newest first, with who found it and,
 // once collected, who picked it up, when, and which staff member handed it over.
 // ponytail: no paging; add `before` paging like the feed if this list gets long.
 export async function listHistory(req, res) {
   const { rows } = await query(
-    `SELECT i.id, i.title, i.location, i.building, i.status, i.created_at AS "postedAt",
+    `SELECT i.id, i.title, i.location, i.building, i.status, i.created_at AS "postedAt", i.is_hidden AS hidden,
             f.school_email AS "finderEmail",
             o.school_email AS "pickedUpBy", h.completed_at AS "pickedUpAt", s.school_email AS "handedOverBy"
      FROM items i

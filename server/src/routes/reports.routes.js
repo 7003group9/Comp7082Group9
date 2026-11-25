@@ -3,6 +3,7 @@ import {
   dismissReports,
   hidePost,
   moderationQueue,
+  unhidePost,
 } from '../controllers/reports.controller.js';
 import { requireAuth, requireRole } from '../middleware/auth.js';
 
@@ -14,6 +15,7 @@ router.param('id', (req, res, next, id) =>
 
 router.get('/', ...security, moderationQueue);
 router.post('/:id/hide', ...security, hidePost);
+router.post('/:id/unhide', ...security, unhidePost);
 router.post('/:id/dismiss', ...security, dismissReports);
 
 export default router;

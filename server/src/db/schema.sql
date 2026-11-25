@@ -19,6 +19,7 @@ CREATE TABLE IF NOT EXISTS items (
   latitude            DOUBLE PRECISION CHECK (latitude BETWEEN -90 AND 90),     -- GPS pin (new posts must have one)
   longitude           DOUBLE PRECISION CHECK (longitude BETWEEN -180 AND 180),
   is_hidden           BOOLEAN NOT NULL DEFAULT FALSE,  -- removed from public feeds by moderation
+  hidden_at           TIMESTAMPTZ,              -- when it was hidden (null when not hidden); claimants it affected see it for 24h
   status              TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'claim pending', 'claimed', 'dropped off', 'handed off')),  -- claimed = a claim was approved; dropped off = the finder left it at Campus Security
   created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),  -- when it was posted
   claimed_at          TIMESTAMPTZ                           -- when a claim was approved; the feed hides it 24h later
@@ -33,15 +34,15 @@ CREATE TABLE IF NOT EXISTS item_questions (
   expected_answer TEXT NOT NULL
 );
 
--- The photo of a found item, saved with the post. The small versions are made once,
--- at upload, so viewing a photo never has to process it.
+-- The photo of a found item, saved with the post as three WebP copies made once, at
+-- upload, so viewing never has to process it. The upload itself isn't kept: it can be
+-- 5 MB and carries the finder's GPS location and phone model, which the copies don't.
 CREATE TABLE IF NOT EXISTS item_images (
   id        SERIAL PRIMARY KEY,
   item_id   INTEGER NOT NULL REFERENCES items(id) ON DELETE CASCADE,
-  mime_type TEXT NOT NULL,   -- of data (thumb and blurred are always WebP)
-  data      BYTEA NOT NULL,  -- the original, for the finder and Campus Security
-  thumb     BYTEA NOT NULL,  -- clear and small, for their feed cards
-  blurred   BYTEA NOT NULL   -- small and blurred, for everyone else
+  large     BYTEA NOT NULL,  -- clear, up to 1280px: the detail screen, for those who may see it clearly
+  thumb     BYTEA NOT NULL,  -- clear, 192px: their feed cards
+  blurred   BYTEA NOT NULL   -- blurred, 400px: everyone else
 );
 
 DROP TABLE IF EXISTS drafts;
@@ -50,7 +51,10 @@ CREATE TABLE IF NOT EXISTS claims (
   id           SERIAL PRIMARY KEY,
   item_id      INTEGER NOT NULL REFERENCES items(id),
   claimant_id  INTEGER NOT NULL REFERENCES users(id),
-  status       TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected'))
+  -- 'post hidden': the claim was pending when Campus Security hid the post. It is closed,
+  -- but NOT a rejection, so it never counts toward the rejected-claims lockout. Unhiding
+  -- the post puts it back to 'pending'.
+  status       TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected', 'post hidden'))
 );
 
 CREATE TABLE IF NOT EXISTS claim_answers (

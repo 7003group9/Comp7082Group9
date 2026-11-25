@@ -298,6 +298,10 @@ test('only Campus Security can access the moderation queue and actions', () =>
       method: 'POST',
       headers: as('student'),
     }), 403);
+    assert.equal(await status(`${base}/reports/1/unhide`, {
+      method: 'POST',
+      headers: as('student'),
+    }), 403);
   }));
 
 test('form options are public and match what posts accept', () =>

@@ -41,7 +41,7 @@ async function lockedOut(userId) {
 // GET /items/:id/questions: what the claim form asks. Question text ONLY; the
 // expected answers never leave the server. Reply: { questions: [{ id, question }],
 // myClaim, itemStatus }, where myClaim is this user's claim status if they already claimed it
-// ('pending', 'approved' or 'rejected'; questions is then empty), else null. itemStatus
+// ('pending', 'approved', 'rejected' or 'post hidden'; questions is then empty), else null. itemStatus
 // lets an approved claimant see when the item is 'dropped off' (ready to pick up).
 // Someone locked out (too many rejected claims) gets 403 { error, locked: true }.
 export async function claimForm(req, res) {

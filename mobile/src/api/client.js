@@ -166,5 +166,8 @@ export const fetchReportedPosts = (token) =>
   send("GET", "/reports", undefined, token);
 export const hideReportedPost = (itemId, token) =>
   post(`/reports/${itemId}/hide`, undefined, token);
+// Undo a hide: the post is public again and the claims hiding closed go back to pending.
+export const unhidePost = (itemId, token) =>
+  post(`/reports/${itemId}/unhide`, undefined, token);
 export const dismissReportedPost = (itemId, token) =>
   post(`/reports/${itemId}/dismiss`, undefined, token);

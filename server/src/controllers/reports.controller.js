@@ -3,6 +3,7 @@ import {
   dismissReport,
   hideReportedPost,
   listOpenReports,
+  unhidePost as unhide,
 } from '../services/reports.service.js';
 
 export async function submitReport(req, res) {
@@ -29,6 +30,12 @@ export async function moderationQueue(req, res) {
 export async function hidePost(req, res) {
   await hideReportedPost(Number(req.params.id), req.user.id);
   res.json({ ok: true, itemId: Number(req.params.id), action: 'hidden' });
+}
+
+// POST /reports/:id/unhide: puts a hidden post back, and reopens the claims the hide closed.
+export async function unhidePost(req, res) {
+  const reopened = await unhide(Number(req.params.id));
+  res.json({ ok: true, itemId: Number(req.params.id), action: 'unhidden', reopenedClaims: reopened });
 }
 
 export async function dismissReports(req, res) {

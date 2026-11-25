@@ -1,7 +1,7 @@
 import { useCallback, useContext, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { AuthContext } from '../context/AuthContext';
-import { fetchHistory, setItemStatus } from '../api/client';
+import { fetchHistory, setItemStatus, unhidePost } from '../api/client';
 import { postedAt, where } from '../components/ItemCard';
 import StatusLabel from '../components/StatusLabel';
 import { useConfirm, useFocusList } from '../hooks';
@@ -20,7 +20,8 @@ const STATUS_OPTIONS = {
 
 // Campus Security only: every post, newest first, with who found it and, once
 // collected, who picked it up, when, and which staff member handed it over.
-// Items waiting on the desk have a status dropdown; each choice needs a second tap.
+// Items waiting on the desk have a status dropdown, and hidden posts an Unhide button
+// (which also reopens the claims hiding closed); each needs a second tap.
 export default function HistoryScreen() {
   const { user } = useContext(AuthContext);
   const load = useCallback(() => fetchHistory(user.token), [user.token]);
@@ -29,12 +30,14 @@ export default function HistoryScreen() {
   const [confirm, setConfirm] = useConfirm(); // "<item id>:<status>" waiting for a second tap
   const [busyId, setBusyId] = useState(null);
 
+  // status: a new status from STATUS_OPTIONS, or 'unhide'.
   async function choose(item, status) {
     if (confirm !== `${item.id}:${status}`) return setConfirm(`${item.id}:${status}`);
     setError('');
     setBusyId(item.id);
     try {
-      await setItemStatus(item.id, status, user.token);
+      if (status === 'unhide') await unhidePost(item.id, user.token);
+      else await setItemStatus(item.id, status, user.token);
       setItems(await load()); // reload, so pick-up details show up too
       setOpenId(null);
     } catch (e) {
@@ -66,6 +69,19 @@ export default function HistoryScreen() {
           </Text>
           {/* Same wording as the finder sees, so 'Dropped off' = waiting at the desk. */}
           <StatusLabel item={item} mine />
+          {item.hidden ? (
+            <Pressable
+              style={[styles.option, confirm === `${item.id}:unhide` && styles.armed]}
+              onPress={() => choose(item, 'unhide')}
+              disabled={busyId === item.id}
+              accessibilityRole="button"
+              accessibilityLabel={`Unhide ${item.title}`}
+            >
+              <Text style={[type.body, confirm === `${item.id}:unhide` && styles.armedText]}>
+                {confirm === `${item.id}:unhide` ? 'Tap again to unhide' : 'Unhide post (reopens its claims)'}
+              </Text>
+            </Pressable>
+          ) : null}
           {STATUS_OPTIONS[item.status] ? (
             <>
               <Pressable
