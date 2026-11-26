@@ -12,7 +12,7 @@ import { REPORT_REASONS } from '../src/services/reports.service.js';
 import { MAX_REJECTED_CLAIMS, isLockedOut } from '../src/controllers/claims.controller.js';
 import { STATUS_CHANGES } from '../src/controllers/items.controller.js';
 import { rateLimit, resetRateLimits } from '../src/middleware/rateLimit.js';
-import { isSuspended, setSuspended } from '../src/services/suspensions.js';
+import { isSuspended, loadSuspended, setSuspended } from '../src/services/suspensions.js';
 
 // Starts the app on a free port, runs fn(baseUrl), and always stops it again.
 async function withServer(fn) {
@@ -430,6 +430,84 @@ test('a suspended user is logged out on their next request', () =>
     }
     assert.equal(isSuspended(4242), false);
   }));
+
+test('suspending and unsuspending updates the database and the logged-out list', async (t) => {
+  t.mock.method(pool, 'query', async (text, params) => {
+    if (text.includes('suspended_at = COALESCE')) {
+      assert.deepEqual(params, ['7', 1]); // the student, and the staff member doing it
+      return { rows: [{ id: 7, suspendedAt: '2026-11-26T10:00:00Z' }] };
+    }
+    if (text.includes('suspended_at = NULL')) return { rows: [{ id: 7 }] };
+    throw new Error(`Unexpected database query: ${text}`);
+  });
+
+  await withServer(async (base) => {
+    try {
+      const res = await fetch(`${base}/users/7/suspend`, { method: 'POST', headers: as('security') });
+      assert.equal(res.status, 200);
+      assert.equal((await res.json()).id, 7);
+      assert.ok(isSuspended(7));
+
+      const back = await fetch(`${base}/users/7/unsuspend`, { method: 'POST', headers: as('security') });
+      assert.equal(back.status, 200);
+      assert.deepEqual(await back.json(), { id: 7, suspendedAt: null });
+      assert.equal(isSuspended(7), false);
+    } finally {
+      setSuspended(7, false);
+    }
+  });
+});
+
+test('suspend, unsuspend and unlock give 404 for staff or missing accounts', async (t) => {
+  t.mock.method(pool, 'query', async () => ({ rows: [] })); // the UPDATE matched nobody
+  await withServer(async (base) => {
+    for (const action of ['suspend', 'unsuspend', 'unlock']) {
+      assert.equal(await status(`${base}/users/99/${action}`, { method: 'POST', headers: as('security') }), 404);
+    }
+    assert.equal(isSuspended(99), false);
+  });
+});
+
+test('unlocking someone lets them claim again', async (t) => {
+  t.mock.method(pool, 'query', async (text, params) => {
+    assert.match(text, /unlocked_rejections/);
+    assert.deepEqual(params, ['7']);
+    return { rows: [{ id: 7 }] };
+  });
+  await withServer(async (base) => {
+    const res = await fetch(`${base}/users/7/unlock`, { method: 'POST', headers: as('security') });
+    assert.equal(res.status, 200);
+    assert.deepEqual(await res.json(), { id: 7, locked: false });
+  });
+});
+
+test('the restricted list returns locked-out and suspended accounts', async (t) => {
+  const rows = [
+    { id: 7, email: 'a@my.bcit.ca', role: 'student', suspendedAt: null, rejected: 3, suspendedBy: null, locked: true },
+    { id: 8, email: 'b@my.bcit.ca', role: 'student', suspendedAt: '2026-11-26T10:00:00Z', rejected: 0, suspendedBy: 'admin@my.bcit.ca', locked: false },
+  ];
+  t.mock.method(pool, 'query', async (text, params) => {
+    assert.deepEqual(params, [MAX_REJECTED_CLAIMS]);
+    return { rows };
+  });
+  await withServer(async (base) => {
+    const res = await fetch(`${base}/users/restricted`, { headers: as('security') });
+    assert.equal(res.status, 200);
+    assert.deepEqual(await res.json(), rows);
+  });
+});
+
+test('suspended accounts are loaded from the database at startup', async (t) => {
+  t.mock.method(pool, 'query', async () => ({ rows: [{ id: 11 }, { id: 12 }] }));
+  setSuspended(13, true); // left over from before: should be cleared
+  try {
+    await loadSuspended();
+    assert.ok(isSuspended(11) && isSuspended(12));
+    assert.equal(isSuspended(13), false);
+  } finally {
+    [11, 12, 13].forEach((id) => setSuspended(id, false));
+  }
+});
 
 test('Campus Security can only make the allowed status changes by hand', () => {
   assert.deepEqual(STATUS_CHANGES.claimed, ['dropped off']);
