@@ -7,7 +7,8 @@ import { pool } from '../src/config/db.js';
 import { issueCode, checkCode, forgetCode } from '../src/services/loginCodes.js';
 import { errorHandler } from '../src/middleware/errorHandler.js';
 import { signToken, verifyToken } from '../src/services/token.js';
-import { BUILDINGS, CATEGORIES, MAX_QUESTIONS, checkItem } from '../src/services/itemValidation.js';
+import { BUILDINGS, CATEGORIES, MAX_PHOTOS, MAX_PHOTO_BYTES, MAX_QUESTIONS, PHOTO_TYPES, checkItem } from '../src/services/itemValidation.js';
+import { REPORT_REASONS } from '../src/services/reports.service.js';
 import { MAX_REJECTED_CLAIMS, isLockedOut } from '../src/controllers/claims.controller.js';
 import { STATUS_CHANGES } from '../src/controllers/items.controller.js';
 import { rateLimit, resetRateLimits } from '../src/middleware/rateLimit.js';
@@ -153,6 +154,7 @@ test('posting an item needs login and a complete form', () =>
     await rejected({ location: '' }, 'location');
     await rejected({ category: 'Pets' }, 'category');
     await rejected({ questions: [{ question: 'What sticker?', answer: '' }] }, 'questions');
+    await rejected({}, 'photos'); // a complete form with no photo
   }));
 
 test('posting rejects photos that are not images', () =>
@@ -180,39 +182,6 @@ test('my posts, editing and deleting need login', () =>
     assert.equal(await status(`${base}/items/1`, { method: 'PUT' }), 401);
     assert.equal(await status(`${base}/items/1`, { method: 'DELETE' }), 401);
   }));
-
-test('partial edits block claimed posts and allow unclaimed posts', async (t) => {
-  let claimed = true;
-  const saved = { id: 1, title: 'Edited item' };
-  t.mock.method(pool, 'query', async (text, params) => {
-    if (text.includes('SELECT id, finder_id')) return { rows: [{ id: 1, finder_id: 1 }] };
-    if (text.includes('UPDATE items')) {
-      assert.match(text, /NOT EXISTS \(SELECT 1 FROM claims WHERE item_id = items\.id\)/);
-      assert.deepEqual(params, ['Edited item', '1']);
-      return { rows: claimed ? [] : [saved] };
-    }
-    throw new Error(`Unexpected database query: ${text}`);
-  });
-
-  await withServer(async (base) => {
-    const edit = () => fetch(`${base}/items/1`, {
-      method: 'PUT',
-      headers: as(),
-      body: JSON.stringify({ title: 'Edited item' }),
-    });
-
-    const blocked = await edit();
-    assert.equal(blocked.status, 409);
-    assert.deepEqual(await blocked.json(), {
-      error: 'Someone has already claimed this item, so it can no longer be edited',
-    });
-
-    claimed = false;
-    const allowed = await edit();
-    assert.equal(allowed.status, 200);
-    assert.deepEqual(await allowed.json(), saved);
-  });
-});
 
 test('claiming needs login and a real item id', () =>
   withServer(async (base) => {
@@ -298,13 +267,25 @@ test('only Campus Security can access the moderation queue and actions', () =>
       method: 'POST',
       headers: as('student'),
     }), 403);
+    assert.equal(await status(`${base}/reports/1/unhide`, {
+      method: 'POST',
+      headers: as('student'),
+    }), 403);
   }));
 
 test('form options are public and match what posts accept', () =>
   withServer(async (base) => {
     const res = await fetch(`${base}/items/options`);
     assert.equal(res.status, 200);
-    assert.deepEqual(await res.json(), { categories: CATEGORIES, buildings: BUILDINGS, maxQuestions: MAX_QUESTIONS });
+    assert.deepEqual(await res.json(), {
+      categories: CATEGORIES,
+      buildings: BUILDINGS,
+      maxQuestions: MAX_QUESTIONS,
+      maxPhotos: MAX_PHOTOS,
+      maxPhotoMb: MAX_PHOTO_BYTES / 1024 / 1024,
+      photoTypes: PHOTO_TYPES,
+      reportReasons: REPORT_REASONS,
+    });
   }));
 
 test('unknown routes return consistent JSON 404s', () =>

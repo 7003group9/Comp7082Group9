@@ -1,23 +1,12 @@
 import { useContext, useEffect, useState } from 'react';
 import { ActivityIndicator, Linking, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { AuthContext } from '../context/AuthContext';
-import { fetchClaimForm, reportItem, submitClaim } from '../api/client';
+import { fetchClaimForm, fetchOptions, reportItem, submitClaim } from '../api/client';
 import ErrorRetry from '../components/ErrorRetry';
 import ItemPhoto from '../components/ItemPhoto';
 import { colors, spacing, type, ui } from '../theme';
 import { where } from '../components/ItemCard';
-
-// What a claimant sees once they've claimed (they only get one try per item):
-// a highlighted headline in the status colour, then what to do next.
-const CLAIM_STATUS = {
-  pending: { headline: 'Your claim was sent.', next: 'Campus Security will check your answers. Check back here for the result.', color: colors.tagWait, text: colors.tagWaitText },
-  approved: { headline: 'Your claim was approved.', next: "The finder is dropping it off at Campus Security. Check back here to see when it's ready to pick up.", color: colors.tagDone, text: colors.tagDoneText },
-  // Approved, and Campus Security has marked the item received.
-  ready: { headline: 'Your item is ready to pick up.', next: 'Collect it from the Campus Security desk.', color: colors.tagDone, text: colors.tagDoneText },
-  // Approved, and Campus Security recorded that you picked it up.
-  collected: { headline: 'You picked this up.', next: 'Glad you got it back!', color: colors.tagDone, text: colors.tagDoneText },
-  rejected: { headline: "Your claim wasn't approved.", next: 'If this really is yours, visit Campus Security with proof.', color: colors.tagNo, text: colors.tagNoText },
-};
+import { CLAIM_STATUS, claimStage } from '../claimStatus';
 
 // One found item from the list, and the claim form: the finder's private
 // questions (text only, never the answers). Campus Security reviews each claim.
@@ -36,7 +25,13 @@ export default function ItemDetailScreen({ route }) {
   const [reportDetails, setReportDetails] = useState('');
   const [reportBusy, setReportBusy] = useState(false);
   const [reportMessage, setReportMessage] = useState('');
-  const reportReasons = ['Spam', 'Inappropriate content', 'Prohibited item', 'Scam or fraud', 'Incorrect or misleading information', 'Other'];
+  const [reportReasons, setReportReasons] = useState([]); // from the server (GET /items/options)
+
+  useEffect(() => {
+    fetchOptions()
+      .then((o) => setReportReasons(o.reportReasons ?? []))
+      .catch(() => {}); // the report form says it couldn't load them
+  }, []);
 
   async function submitReport() {
     if (!reportReason) return setReportMessage('Choose a reason for your report.');
@@ -115,9 +110,7 @@ export default function ItemDetailScreen({ route }) {
   }
   else if (!form) claimSection = <ActivityIndicator color={colors.accent} />;
   else if (form.myClaim) {
-    const stage = form.myClaim !== 'approved' ? form.myClaim
-      : { 'dropped off': 'ready', 'handed off': 'collected' }[form.itemStatus] ?? 'approved';
-    claimSection = statusBlock(CLAIM_STATUS[stage]);
+    claimSection = statusBlock(CLAIM_STATUS[claimStage(form.myClaim, form.itemStatus)]);
   }
   else {
     claimSection = (
@@ -168,7 +161,7 @@ export default function ItemDetailScreen({ route }) {
       {claimSection}
 
       {/* Students only: the server refuses reports from guests (throwaway accounts). */}
-      {['open', 'claim pending'].includes(route.params.status) && user.role !== 'guest' ? (
+      {['open', 'claim pending'].includes(route.params.status) && user.role !== 'guest' && route.params.myClaim !== 'post hidden' ? (
         <View style={styles.reportArea}>
           {reportMessage ? <Text style={reportMessage.includes('submitted') ? styles.confirmation : styles.error}>{reportMessage}</Text> : null}
           <Pressable
@@ -186,6 +179,9 @@ export default function ItemDetailScreen({ route }) {
           <View style={styles.modalCard}>
             <Text style={type.heading}>Report this post</Text>
             <Text style={[type.meta, styles.modalHint]}>Tell Campus Security why this post should be reviewed.</Text>
+            {reportReasons.length ? null : (
+              <Text style={styles.error}>Couldn't load the report reasons. Check your connection and try again.</Text>
+            )}
             {reportReasons.map((reason) => (
               <Pressable
                 key={reason}

@@ -6,10 +6,6 @@ import BuildingPicker from "../components/BuildingPicker";
 import CategoryChips from "../components/CategoryChips";
 import { colors, spacing, type, ui } from "../theme";
 
-// Photo limits; the server checks the same ones.
-const MAX_PHOTOS = 1;
-const MAX_PHOTO_MB = 5;
-const PHOTO_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
 const PLACEHOLDER = colors.placeholder;
 const EMPTY_QA = { question: "", answer: "" };
 
@@ -44,11 +40,12 @@ function checkForm({ title, location, pin, questions }) {
   return errors;
 }
 
-// Opens the device's file picker and calls onPick with the chosen files.
-function pickFiles(onPick) {
+// Opens the device's file picker for these types (any image if the list isn't loaded)
+// and calls onPick with the chosen files.
+function pickFiles(onPick, types) {
   const input = document.createElement("input");
   input.type = "file";
-  input.accept = PHOTO_TYPES.join(",");
+  input.accept = types.length ? types.join(",") : "image/*";
   input.multiple = false;
   input.onchange = () => onPick(Array.from(input.files ?? []));
   input.click();
@@ -104,8 +101,9 @@ export default function PostItemScreen({ navigation, route }) {
   const [locating, setLocating] = useState(false); // waiting for the device's position
   const [category, setCategory] = useState("Other");
   // What the server offers. Until it answers (or if it can't), the form has no
-  // categories or buildings and room for just one question.
-  const [options, setOptions] = useState({ categories: [], buildings: [], maxQuestions: 1 });
+  // categories or buildings, room for one question and one photo, and leaves the
+  // photo type and size checks to the server.
+  const [options, setOptions] = useState({ categories: [], buildings: [], maxQuestions: 1, maxPhotos: 1, photoTypes: [], maxPhotoMb: null });
   // Each question has the answer the owner must give to claim the item.
   const [questions, setQuestions] = useState([EMPTY_QA]);
   // Picked photos as { file, uri }; uri is a preview straight from the device.
@@ -183,11 +181,17 @@ export default function PostItemScreen({ navigation, route }) {
   }
 
   function addPhotos(files) {
-    const room = MAX_PHOTOS - photos.length;
-    const ok = files.filter((f) => PHOTO_TYPES.includes(f.type) && f.size <= MAX_PHOTO_MB * 1024 * 1024);
+    const { maxPhotos, photoTypes, maxPhotoMb } = options;
+    const room = maxPhotos - photos.length;
+    const ok = files.filter(
+      (f) => (!photoTypes.length || photoTypes.includes(f.type)) && (!maxPhotoMb || f.size <= maxPhotoMb * 1024 * 1024),
+    );
     const problems = [];
-    if (ok.length < files.length) problems.push(`Photos must be JPEG, PNG, WebP or GIF and ${MAX_PHOTO_MB} MB or smaller.`);
-    if (ok.length > room) problems.push("You can only add one photo.");
+    if (ok.length < files.length) {
+      const kinds = photoTypes.map((t) => t.replace("image/", "").toUpperCase()).join(", "); // "JPEG, PNG, WEBP, GIF"
+      problems.push(`Photos must be ${kinds} images and ${maxPhotoMb} MB or smaller.`);
+    }
+    if (ok.length > room) problems.push(maxPhotos === 1 ? "You can only add one photo." : `You can add up to ${maxPhotos} photos.`);
     setFieldErrors((fe) => ({ ...fe, photos: problems.join(" ") || undefined }));
     setPhotos((ps) => [...ps, ...ok.slice(0, room).map((file) => ({ file, uri: URL.createObjectURL(file) }))]);
   }
@@ -202,6 +206,7 @@ export default function PostItemScreen({ navigation, route }) {
   function review() {
     setError("");
     const errors = checkForm({ title, location, pin, questions });
+    if (!editId && !photos.length) errors.photos = "Add a photo of the item."; // edits can't change photos
     setFieldErrors(errors);
     if (Object.keys(errors).length) return setError("Fix the fields marked above first.");
     setReviewing(true);
@@ -223,7 +228,7 @@ export default function PostItemScreen({ navigation, route }) {
         return;
       }
       await createItem({ ...post, photos: photos.map((p) => p.file) }, user.token);
-      navigation.replace("DropOff"); 
+      navigation.navigate("Home"); // the list reloads when it comes back into view
     } catch (err) {
       // The server said which fields are wrong: back to the form to show them there.
       if (err.fields) {
@@ -395,13 +400,13 @@ export default function PostItemScreen({ navigation, route }) {
 
       {editId ? null : (
         <>
-          <Label style={styles.gap}>Photograph</Label>
+          <Label required style={styles.gap}>Photograph</Label>
           <Text style={type.meta}>
             Don't show anything that gives away your private answers, like a sticker or what's inside.
           </Text>
           <Thumbnails photos={photos} onRemove={removePhoto} />
-          {photos.length < MAX_PHOTOS ? (
-            <Pressable style={[styles.secondary, styles.addButton]} onPress={() => pickFiles(addPhotos)} accessibilityRole="button">
+          {photos.length < options.maxPhotos ? (
+            <Pressable style={[styles.secondary, styles.addButton]} onPress={() => pickFiles(addPhotos, options.photoTypes)} accessibilityRole="button">
               <Text style={styles.secondaryText}>+ Add photo</Text>
             </Pressable>
           ) : null}

@@ -17,7 +17,6 @@ import { colors } from "./src/theme";
 import { AuthProvider, AuthContext } from "./src/context/AuthContext";
 import { useContext } from "react";
 import NotificationsScreen from "./src/screens/NotificationsScreen";
-import DropOffScreen from "./src/screens/DropOffScreen";
 
 // Phone-width column, centred when viewed in a desktop browser.
 const frame = {
@@ -91,13 +90,6 @@ function AppNavigator() {
               component={NotificationsScreen}
               options={{ title: "Notifications" }}
             />
-            {user.role !== "guest" ? (
-              <Stack.Screen
-                name="DropOff"
-                component={DropOffScreen}
-                options={{ title: "Drop-off instructions" }}
-              />
-            ) : null}
 
             {/* Campus Security only; the server also refuses everyone else. */}
             {user.role === "security" ? (

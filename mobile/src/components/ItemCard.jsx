@@ -44,9 +44,8 @@ export default function ItemCard({ item, onPress }) {
       <View style={styles.main}>
         <Text style={styles.title}>{item.title}</Text>
         <Text style={type.meta}>{where(item)}</Text>
-        {/* Open items need no label on the feed, unless your claim on it was turned down,
-            or (for Campus Security) it has sat unclaimed for 30+ days. */}
-        {item.status !== 'open' || item.myClaim === 'rejected' || (security && item.flaggedUnclaimed) ? (
+        {/* Open items only get a label if your claim was rejected/closed, or (security only) it's 30+ days old. */}
+        {item.status !== 'open' || ['rejected', 'post hidden'].includes(item.myClaim) || (security && item.flaggedUnclaimed) ? (
           <StatusLabel item={item} />
         ) : null}
       </View>

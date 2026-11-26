@@ -44,7 +44,8 @@ export default function HomeScreen({ navigation }) {
 
   // items: what's shown; hasMore: the server has older ones; loading: first load;
   // loadingMore / refreshing: next page / pull-to-refresh; error: message to show;
-  // query/category: current filters; categories: "All" plus the server's list.
+  // query/category/location/dates: current filters (dates are YYYY-MM-DD from the date
+  // pickers, or ""); categories: "All" plus the server's list; buildings: the server's list.
   const [items, setItems] = useState([]);
   const [hasMore, setHasMore] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -64,24 +65,12 @@ export default function HomeScreen({ navigation }) {
   // overwrite the results of a newer one.
   const latest = useRef(0);
 
-  // The newest page for the current search and category, replacing what's shown.
+  // The newest page for the current search and filters, replacing what's shown.
   // The server does the searching, so it covers every item, not just the loaded ones.
-  const validDateFrom = /^\d{4}-\d{2}-\d{2}$/.test(dateFrom) ? dateFrom : "";
-
-  const validDateTo = /^\d{4}-\d{2}-\d{2}$/.test(dateTo) ? dateTo : "";
   const loadFirst = useCallback(async () => {
     const mine = ++latest.current;
     try {
-      const page = await fetchItems(
-        {
-          q: search,
-          category,
-          location: location.trim(),
-          dateFrom: validDateFrom,
-          dateTo: validDateTo,
-        },
-        user.token,
-      );
+      const page = await fetchItems({ q: search, category, location, dateFrom, dateTo }, user.token);
       if (mine !== latest.current) return;
       setItems(page.items);
       setHasMore(page.hasMore);
@@ -89,10 +78,11 @@ export default function HomeScreen({ navigation }) {
     } catch (e) {
       if (mine === latest.current) setError(e.message);
     }
-  }, [search, category, location, validDateFrom, validDateTo, user.token]);
+  }, [search, category, location, dateFrom, dateTo, user.token]);
 
-  // The filter chips. The list still works if this fails (only "All" shows).
-  const loadCategories = () =>
+  // The categories and buildings for the filter panel. The list still works if this
+  // fails (only "All" shows and there are no buildings to pick).
+  const loadOptions = () =>
     fetchOptions()
       .then((o) => {
         setCategories(["All", ...o.categories]);
@@ -100,10 +90,10 @@ export default function HomeScreen({ navigation }) {
       })
       .catch(() => {});
   useEffect(() => {
-    loadCategories();
+    loadOptions();
   }, []);
 
-  // Load when the screen opens, when the search or category changes, and when
+  // Load when the screen opens, when the search or a filter changes, and when
   // coming back to it (e.g. after posting).
   useFocusEffect(
     useCallback(() => {
@@ -117,17 +107,8 @@ export default function HomeScreen({ navigation }) {
     const mine = latest.current;
     setLoadingMore(true);
     try {
-      const page = await fetchItems(
-        {
-          q: search,
-          category,
-          location: location.trim(),
-          dateFrom: validDateFrom,
-          dateTo: validDateTo,
-          before: items[items.length - 1].id,
-        },
-        user.token,
-      );
+      const before = items[items.length - 1].id;
+      const page = await fetchItems({ q: search, category, location, dateFrom, dateTo, before }, user.token);
       if (mine !== latest.current) return; // the search changed while this was loading
       setItems((prev) => [...prev, ...page.items]);
       setHasMore(page.hasMore);
@@ -149,11 +130,11 @@ export default function HomeScreen({ navigation }) {
   // Pull-to-refresh handler.
   const onRefresh = async () => {
     setRefreshing(true);
-    await Promise.all([loadFirst(), loadCategories()]);
+    await Promise.all([loadFirst(), loadOptions()]);
     setRefreshing(false);
   };
 
-  // Scrolls with the list: title, search box and category chips.
+  // Scrolls with the list: title and buttons, search box, and the filter panel.
   const header = (
     <View style={styles.header}>
       <View style={styles.topRow}>

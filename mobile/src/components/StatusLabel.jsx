@@ -14,6 +14,9 @@ const TONE = {
 // Wording depends on who's looking: mine = the finder, myClaim = the viewer's own claim.
 function forItem(item, mine) {
   const approved = item.myClaim === 'approved';
+  // Post hidden by Campus Security.
+  if (item.hidden) return ['Hidden by Campus Security', 'rejected'];
+  if (item.myClaim === 'post hidden') return ['Removed by Campus Security', 'rejected'];
   // Someone whose claim was turned down sees that, whatever happened to the item since.
   if (item.myClaim === 'rejected') return ["Your claim wasn't approved", 'rejected'];
   switch (item.status) {
@@ -37,6 +40,7 @@ const CLAIM = {
   pending: ['Pending review', 'pending'],
   approved: ['Approved', 'claimed'],
   rejected: ['Rejected', 'rejected'],
+  'post hidden': ['Closed: post hidden', 'rejected'],
 };
 
 export default function StatusLabel({ item, claim, mine = false }) {
