@@ -481,6 +481,23 @@ test('the 6th login attempt in a minute gets 429', () =>
     resetRateLimits();
   }));
 
+test('login limits are per email, so students on the same wifi do not block each other', () =>
+  withServer(async (base) => {
+    resetRateLimits();
+    const tryCode = (email) =>
+      status(`${base}/auth/verify-code`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, code: '000000', challenge: 'nope' }),
+      });
+    for (let i = 0; i < 5; i++) await tryCode('a@my.bcit.ca');
+    assert.equal(await tryCode('A@my.bcit.ca '), 429); // same email, different case
+    assert.equal(await tryCode('b@my.bcit.ca'), 401); // same IP, different student: still allowed
+    for (let i = 0; i < 24; i++) await tryCode(`s${i}@my.bcit.ca`);
+    assert.equal(await tryCode('c@my.bcit.ca'), 429); // over 30 from one IP in a minute
+    resetRateLimits();
+  }));
+
 test('rate limits are per person and reset after the minute', () => {
   resetRateLimits();
   let now = 1_000_000;

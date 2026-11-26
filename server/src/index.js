@@ -8,3 +8,4 @@ import { query } from './config/db.js';
 await query(await readFile(new URL('./db/schema.sql', import.meta.url), 'utf8'));
 await loadSuspended(); // so suspended users are blocked from the first request
 app.listen(PORT, () => console.log(`Campus Claim API on http://localhost:${PORT}`));
+we 
