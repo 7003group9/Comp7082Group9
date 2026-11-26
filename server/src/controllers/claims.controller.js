@@ -173,17 +173,24 @@ export async function decideClaim(req, res) {
   }
 }
 
-// Backward-compatible aliases retained for the earlier mine/review API.
+// GET /claims/mine: the logged-in user's claims for the notifications screen, latest
+// change first. Each row is the item in the same shape as the feed (so the app can open
+// it) plus myClaim (the claim's status) and updatedAt: when the claim last moved on
+// (sent, decided, closed by a hide, item received at the desk, picked up).
 export async function myClaims(req, res) {
   const { rows } = await query(
-    `SELECT c.id, c.item_id AS "itemId", c.status, i.title, i.status AS "itemStatus"
+    `SELECT i.id, i.title, i.category, i.location, i.building, i.latitude, i.longitude,
+            i.created_at AS "postedAt", i.status, c.status AS "myClaim",
+            (NOT i.is_hidden AND EXISTS (SELECT 1 FROM item_images p WHERE p.item_id = i.id)) AS "hasPhoto",
+            GREATEST(c.created_at, c.decided_at, h.completed_at,
+                     CASE WHEN c.status = 'approved' THEN i.received_at END,
+                     CASE WHEN c.status = 'post hidden' THEN i.hidden_at END) AS "updatedAt"
      FROM claims c
      JOIN items i ON i.id = c.item_id
+     LEFT JOIN handoffs h ON h.claim_id = c.id
      WHERE c.claimant_id = $1
-     ORDER BY c.id DESC`,
+     ORDER BY "updatedAt" DESC`,
     [req.user.id],
   );
   res.json(rows);
 }
-
-export const reviewClaims = claimsToReview;

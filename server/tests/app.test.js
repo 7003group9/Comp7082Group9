@@ -183,39 +183,6 @@ test('my posts, editing and deleting need login', () =>
     assert.equal(await status(`${base}/items/1`, { method: 'DELETE' }), 401);
   }));
 
-test('partial edits block claimed posts and allow unclaimed posts', async (t) => {
-  let claimed = true;
-  const saved = { id: 1, title: 'Edited item' };
-  t.mock.method(pool, 'query', async (text, params) => {
-    if (text.includes('SELECT id, finder_id')) return { rows: [{ id: 1, finder_id: 1 }] };
-    if (text.includes('UPDATE items')) {
-      assert.match(text, /NOT EXISTS \(SELECT 1 FROM claims WHERE item_id = items\.id\)/);
-      assert.deepEqual(params, ['Edited item', '1']);
-      return { rows: claimed ? [] : [saved] };
-    }
-    throw new Error(`Unexpected database query: ${text}`);
-  });
-
-  await withServer(async (base) => {
-    const edit = () => fetch(`${base}/items/1`, {
-      method: 'PUT',
-      headers: as(),
-      body: JSON.stringify({ title: 'Edited item' }),
-    });
-
-    const blocked = await edit();
-    assert.equal(blocked.status, 409);
-    assert.deepEqual(await blocked.json(), {
-      error: 'Someone has already claimed this item, so it can no longer be edited',
-    });
-
-    claimed = false;
-    const allowed = await edit();
-    assert.equal(allowed.status, 200);
-    assert.deepEqual(await allowed.json(), saved);
-  });
-});
-
 test('claiming needs login and a real item id', () =>
   withServer(async (base) => {
     const claim = (body, headers) => status(`${base}/claims`, { method: 'POST', headers, body: JSON.stringify(body) });

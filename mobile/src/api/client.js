@@ -116,6 +116,10 @@ export const fetchItem = (id) => send("GET", `/items/${id}`);
 // itemStatus then says whether the item is at the security desk yet ('dropped off').
 export const fetchClaimForm = (itemId, token) => send("GET", `/items/${itemId}/questions`, undefined, token);
 
+// Your claims for Notifications, latest change first: each is an item (same shape as the
+// feed, so it can be opened) plus myClaim (the claim's status) and updatedAt.
+export const fetchMyClaims = (token) => send("GET", "/claims/mine", undefined, token);
+
 // Claim an item: answers = [{ questionId, answer }]. Campus Security checks them later.
 export const submitClaim = (itemId, answers, token) => post("/claims", { itemId, answers }, token);
 

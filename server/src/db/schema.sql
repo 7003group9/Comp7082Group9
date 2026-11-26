@@ -77,8 +77,7 @@ CREATE TABLE IF NOT EXISTS post_reports (
   reporter_id  INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   reason       TEXT NOT NULL,
   details      TEXT,
-  status       TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'dismissed', 'resolved')),
-  resolution   TEXT CHECK (resolution IN ('hidden', 'dismissed')),
+  status       TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'hidden', 'dismissed')),  -- what security did about it
   resolved_by  INTEGER REFERENCES users(id),
   resolved_at  TIMESTAMPTZ,
   created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
