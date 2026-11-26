@@ -20,7 +20,8 @@ import { colors, spacing, type, ui } from '../theme';
 // one, so staff can compare them and decide. An approved claim stays here until
 // the owner picks the item up: staff press "Received at the security desk" when the
 // finder hands it in, then "Picked up by owner" when the owner collects it.
-// Every button needs a second tap, since each step is final.
+// Every button needs a second tap: decisions are final, and the desk steps can only be
+// undone from Past posts.
 export default function SecurityDashboardScreen({ navigation }) {
   const { user } = useContext(AuthContext);
   const { list: claims, setList: setClaims, loading, error, setError, failed, reload } = useFocusList(

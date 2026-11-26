@@ -8,8 +8,8 @@ import { useConfirm, useFocusList } from "../hooks";
 import ErrorRetry from "../components/ErrorRetry";
 import { colors, spacing, type, ui } from "../theme";
 
-// The items I posted. Edit and Delete only while nobody has claimed them; after
-// that, what to do next (drop it off, or nothing). Campus Security reviews the claims.
+// The items I posted. Edit and Delete only while nobody has ever claimed them; once a
+// claim is approved, a reminder to drop it off at Campus Security.
 export default function MyListingsScreen({ navigation }) {
   const { user } = useContext(AuthContext);
   const { list: items, setList: setItems, loading, error, setError, failed, reload } = useFocusList(
@@ -66,7 +66,9 @@ export default function MyListingsScreen({ navigation }) {
               <Text style={styles.dropOff}>The owner has picked it up. Thanks for handing it in!</Text>
             ) : null}
           </View>
-          {item.status === "open" ? (
+          {/* Only while nobody has ever claimed it (the server sends editable). Once claimed,
+              even if the claim was rejected, the claim history has to stay as it was. */}
+          {item.editable ? (
             <Pressable
               onPress={() => navigation.navigate("PostItem", { editId: item.id })}
               accessibilityRole="button"
@@ -75,8 +77,7 @@ export default function MyListingsScreen({ navigation }) {
               <Text style={styles.edit}>Edit</Text>
             </Pressable>
           ) : null}
-          {/* Only open posts can be deleted: once claimed, the claim history has to stay. */}
-          {item.status === "open" ? (
+          {item.editable ? (
             <Pressable
               onPress={() => onDelete(item.id)}
               disabled={deletingId === item.id}

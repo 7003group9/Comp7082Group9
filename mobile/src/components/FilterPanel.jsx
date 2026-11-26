@@ -1,7 +1,43 @@
-import { StyleSheet, Text, TextInput, View, Pressable } from "react-native";
+import { StyleSheet, Text, View, Pressable } from "react-native";
 import { colors, spacing } from "../theme";
 import CategoryChips from "./CategoryChips";
 import BuildingPicker from "./BuildingPicker";
+
+// Today as YYYY-MM-DD in the viewer's time zone (found items can't be from the future).
+const today = () => new Date().toLocaleDateString("en-CA");
+
+// The browser's own date picker (the app runs on the web), so the value is always a
+// real YYYY-MM-DD date or "" when cleared. min/max stop "From" coming after "To".
+function DateField({ label, value, onChange, min, max }) {
+  return (
+    <View style={styles.dateField}>
+      <Text style={styles.dateLabel}>{label}</Text>
+      <input
+        type="date"
+        value={value}
+        min={min || undefined}
+        max={max || undefined}
+        onChange={(e) => onChange(e.target.value)}
+        aria-label={`${label} date`}
+        style={dateInput}
+      />
+    </View>
+  );
+}
+
+// A plain HTML element, so a plain style object (not StyleSheet).
+const dateInput = {
+  width: "100%",
+  boxSizing: "border-box",
+  padding: 10,
+  fontSize: 16, // 16px+ stops iPhones zooming in on focus
+  fontFamily: "inherit",
+  color: colors.ink,
+  backgroundColor: colors.paper,
+  border: `1px solid ${colors.line}`,
+  borderRadius: 8,
+};
+
 export default function FilterPanel({
   categories,
   category,
@@ -38,25 +74,11 @@ export default function FilterPanel({
         selected={location}
         onSelect={setLocation}
       />
-      <Text style={styles.label}>Date range</Text>
-
-      <TextInput
-        style={styles.input}
-        placeholder="From (YYYY-MM-DD)"
-        placeholderTextColor={colors.placeholder}
-        value={dateFrom}
-        onChangeText={setDateFrom}
-        autoCapitalize="none"
-      />
-
-      <TextInput
-        style={styles.input}
-        placeholder="To (YYYY-MM-DD)"
-        placeholderTextColor={colors.placeholder}
-        value={dateTo}
-        onChangeText={setDateTo}
-        autoCapitalize="none"
-      />
+      <Text style={styles.label}>Date found</Text>
+      <View style={styles.dates}>
+        <DateField label="From" value={dateFrom} onChange={setDateFrom} max={dateTo || today()} />
+        <DateField label="To" value={dateTo} onChange={setDateTo} min={dateFrom} max={today()} />
+      </View>
 
       <Pressable style={styles.clearButton} onPress={clearFilters}>
         <Text style={styles.clearText}>Clear filters</Text>
@@ -85,15 +107,9 @@ const styles = StyleSheet.create({
     marginTop: spacing.md,
     marginBottom: spacing.xs,
   },
-  input: {
-    borderWidth: 1,
-    borderColor: colors.line,
-    backgroundColor: colors.paper,
-    borderRadius: 8,
-    padding: 10,
-    marginBottom: spacing.sm,
-    color: colors.ink,
-  },
+  dates: { flexDirection: "row", gap: spacing.sm },
+  dateField: { flex: 1 },
+  dateLabel: { fontSize: 13, color: colors.slate, marginBottom: spacing.xs },
   clearButton: {
     marginTop: spacing.md,
     padding: 12,

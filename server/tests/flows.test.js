@@ -130,6 +130,8 @@ test('rejecting the only claim puts the item back to open', { skip }, async () =
   const [finder, claimant, staff] = [await makeUser(), await makeUser(), await makeUser('security')];
   await withServer(async (base) => {
     const item = await postItem(base, finder);
+    const editable = async () => (await api(base, 'GET', '/items/mine', finder))[1].find((i) => i.id === item.id).editable;
+    assert.equal(await editable(), true, 'no claims yet: can edit or delete');
     const [, form] = await api(base, 'GET', `/items/${item.id}/questions`, claimant);
     const [, claim] = await api(base, 'POST', '/claims', claimant, {
       itemId: item.id, answers: [{ questionId: form.questions[0].id, answer: 'Green' }],
@@ -137,6 +139,9 @@ test('rejecting the only claim puts the item back to open', { skip }, async () =
     assert.equal((await api(base, 'POST', `/claims/${claim.id}/decision`, staff, { decision: 'rejected' }))[0], 200);
     assert.equal(await itemStatus(item.id), 'open');
     assert.equal((await api(base, 'GET', `/items/${item.id}/questions`, claimant))[1].myClaim, 'rejected');
+    // Open again, but the rejected claim locks it, so My posts mustn't offer Edit/Delete.
+    assert.equal(await editable(), false);
+    assert.equal((await api(base, 'DELETE', `/items/${item.id}`, finder))[0], 409, 'the server agrees');
   });
 });
 

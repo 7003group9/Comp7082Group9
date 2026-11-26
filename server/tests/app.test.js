@@ -7,7 +7,8 @@ import { pool } from '../src/config/db.js';
 import { issueCode, checkCode, forgetCode } from '../src/services/loginCodes.js';
 import { errorHandler } from '../src/middleware/errorHandler.js';
 import { signToken, verifyToken } from '../src/services/token.js';
-import { BUILDINGS, CATEGORIES, MAX_QUESTIONS, checkItem } from '../src/services/itemValidation.js';
+import { BUILDINGS, CATEGORIES, MAX_PHOTOS, MAX_PHOTO_BYTES, MAX_QUESTIONS, PHOTO_TYPES, checkItem } from '../src/services/itemValidation.js';
+import { REPORT_REASONS } from '../src/services/reports.service.js';
 import { MAX_REJECTED_CLAIMS, isLockedOut } from '../src/controllers/claims.controller.js';
 import { STATUS_CHANGES } from '../src/controllers/items.controller.js';
 import { rateLimit, resetRateLimits } from '../src/middleware/rateLimit.js';
@@ -309,7 +310,15 @@ test('form options are public and match what posts accept', () =>
   withServer(async (base) => {
     const res = await fetch(`${base}/items/options`);
     assert.equal(res.status, 200);
-    assert.deepEqual(await res.json(), { categories: CATEGORIES, buildings: BUILDINGS, maxQuestions: MAX_QUESTIONS });
+    assert.deepEqual(await res.json(), {
+      categories: CATEGORIES,
+      buildings: BUILDINGS,
+      maxQuestions: MAX_QUESTIONS,
+      maxPhotos: MAX_PHOTOS,
+      maxPhotoMb: MAX_PHOTO_BYTES / 1024 / 1024,
+      photoTypes: PHOTO_TYPES,
+      reportReasons: REPORT_REASONS,
+    });
   }));
 
 test('unknown routes return consistent JSON 404s', () =>

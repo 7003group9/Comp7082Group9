@@ -9,7 +9,8 @@
     "test": "node --test",
     "coverage": "node --test --experimental-test-coverage --test-coverage-exclude=tests/**",
     "lint": "node scripts/lint.js",
-    "db:init": "node scripts/init-db.js"
+    "db:init": "node scripts/init-db.js",
+    "db:reset": "docker compose -f ../docker-compose.yml down -v && docker compose -f ../docker-compose.yml up -d db"
   },
   "dependencies": {
     "cors": "^2.8.6",

@@ -5,11 +5,15 @@ import {
   BUILDINGS,
   CATEGORIES,
   MAX_OPEN_POSTS,
+  MAX_PHOTOS,
+  MAX_PHOTO_BYTES,
   MAX_QUESTIONS,
+  PHOTO_TYPES,
   checkItem,
   clean,
   coord,
 } from "../services/itemValidation.js";
+import { REPORT_REASONS } from "../services/reports.service.js";
 import { getItemById, updateItem as updateItemService } from "../services/items.service.js";
 
 // Public fields ONLY. Private questions/answers are never selected here.
@@ -116,13 +120,18 @@ export async function listItems(req, res) {
     hasMore: rows.length > PAGE_SIZE,
   });
 }
-// GET /items/options: what the post form and filters offer. The app builds its
-// pickers from this, so CATEGORIES, BUILDINGS and MAX_QUESTIONS are the only places to edit.
+// GET /items/options: the lists and limits the app's forms use (post form, filters,
+// report form). The app reads them from here, so the server constants are the only
+// place to edit them.
 export const getFormOptions = (req, res) =>
   res.json({
     categories: CATEGORIES,
     buildings: BUILDINGS,
     maxQuestions: MAX_QUESTIONS,
+    maxPhotos: MAX_PHOTOS,
+    maxPhotoMb: MAX_PHOTO_BYTES / 1024 / 1024,
+    photoTypes: PHOTO_TYPES,
+    reportReasons: REPORT_REASONS,
   });
 
 export async function getItem(req, res) {
@@ -304,9 +313,12 @@ export async function createItem(req, res) {
 }
 
 // GET /items/mine: everything the logged-in user posted. hidden: Campus Security hid it.
+// editable: nobody has ever claimed it (even a rejected claim locks it), so it can be edited or deleted.
 export async function listMine(req, res) {
   const { rows } = await query(
-    `SELECT ${PUBLIC_FIELDS}, is_hidden AS hidden FROM items
+    `SELECT ${PUBLIC_FIELDS}, is_hidden AS hidden,
+            NOT EXISTS (SELECT 1 FROM claims WHERE item_id = items.id) AS editable
+     FROM items
      WHERE finder_id = $1 ORDER BY id DESC`,
     [req.user.id],
   );

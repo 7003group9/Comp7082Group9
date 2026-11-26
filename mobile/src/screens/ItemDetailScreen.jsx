@@ -1,7 +1,7 @@
 import { useContext, useEffect, useState } from 'react';
 import { ActivityIndicator, Linking, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { AuthContext } from '../context/AuthContext';
-import { fetchClaimForm, reportItem, submitClaim } from '../api/client';
+import { fetchClaimForm, fetchOptions, reportItem, submitClaim } from '../api/client';
 import ErrorRetry from '../components/ErrorRetry';
 import ItemPhoto from '../components/ItemPhoto';
 import { colors, spacing, type, ui } from '../theme';
@@ -38,7 +38,13 @@ export default function ItemDetailScreen({ route }) {
   const [reportDetails, setReportDetails] = useState('');
   const [reportBusy, setReportBusy] = useState(false);
   const [reportMessage, setReportMessage] = useState('');
-  const reportReasons = ['Spam', 'Inappropriate content', 'Prohibited item', 'Scam or fraud', 'Incorrect or misleading information', 'Other'];
+  const [reportReasons, setReportReasons] = useState([]); // from the server (GET /items/options)
+
+  useEffect(() => {
+    fetchOptions()
+      .then((o) => setReportReasons(o.reportReasons ?? []))
+      .catch(() => {}); // the report form says it couldn't load them
+  }, []);
 
   async function submitReport() {
     if (!reportReason) return setReportMessage('Choose a reason for your report.');
@@ -188,6 +194,9 @@ export default function ItemDetailScreen({ route }) {
           <View style={styles.modalCard}>
             <Text style={type.heading}>Report this post</Text>
             <Text style={[type.meta, styles.modalHint]}>Tell Campus Security why this post should be reviewed.</Text>
+            {reportReasons.length ? null : (
+              <Text style={styles.error}>Couldn't load the report reasons. Check your connection and try again.</Text>
+            )}
             {reportReasons.map((reason) => (
               <Pressable
                 key={reason}

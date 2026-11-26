@@ -1,3 +1,5 @@
+-- Loaded by Docker when it creates the database volume (docker compose up). Editing this
+-- file doesn't change an existing database: run `npm run db:reset` in server/ (deletes all data).
 CREATE TABLE IF NOT EXISTS users (
   id           SERIAL PRIMARY KEY,
   school_email TEXT UNIQUE,
@@ -7,11 +9,6 @@ CREATE TABLE IF NOT EXISTS users (
   unlocked_rejections INTEGER NOT NULL DEFAULT 0,        -- rejected claims forgiven by an unlock (see lockedOut)
   created_at          TIMESTAMPTZ NOT NULL DEFAULT now() -- first login (or guest account made)
 );
--- For databases made before these columns existed (re-running this file is safe).
-ALTER TABLE users ADD COLUMN IF NOT EXISTS suspended_at TIMESTAMPTZ;
-ALTER TABLE users ADD COLUMN IF NOT EXISTS suspended_by INTEGER REFERENCES users(id);
-ALTER TABLE users ADD COLUMN IF NOT EXISTS unlocked_rejections INTEGER NOT NULL DEFAULT 0;
-ALTER TABLE users ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
 
 CREATE TABLE IF NOT EXISTS items (
   id                  SERIAL PRIMARY KEY,
@@ -48,8 +45,6 @@ CREATE TABLE IF NOT EXISTS item_images (
   thumb     BYTEA NOT NULL,  -- clear, 192px: their feed cards
   blurred   BYTEA NOT NULL   -- blurred, 400px: everyone else
 );
-
-DROP TABLE IF EXISTS drafts;
 
 CREATE TABLE IF NOT EXISTS claims (
   id           SERIAL PRIMARY KEY,
