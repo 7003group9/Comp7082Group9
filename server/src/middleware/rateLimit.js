@@ -1,7 +1,5 @@
-// Route guard: at most `max` requests per `windowMs` for each key (by default the
-// caller's IP address). The next one gets 429 until the window is over. Kept in
-// memory like loginCodes.js, so it only works with one server process.
-// Use: router.post('/login', rateLimit('login'), handler)
+// Allows `max` requests per `windowMs` for each key (IP by default), then 429.
+// Kept in memory, so it only works with one server process.
 const windows = new Map(); // "<name>:<key>" -> { count, resetAt }
 
 export const MAX_ATTEMPTS = 5;

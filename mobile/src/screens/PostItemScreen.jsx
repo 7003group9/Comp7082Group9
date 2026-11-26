@@ -59,7 +59,6 @@ const Label = ({ children, required, style }) => (
   </Text>
 );
 
-// Red message under a field; nothing when there is no error.
 const FieldError = ({ message }) => (message ? <Text style={styles.fieldError}>{message}</Text> : null);
 
 // Row of photo previews. With onRemove, each one gets a remove button.
@@ -109,9 +108,9 @@ export default function PostItemScreen({ navigation, route }) {
   // Picked photos as { file, uri }; uri is a preview straight from the device.
   const [photos, setPhotos] = useState([]);
   const [error, setError] = useState("");
-  const [fieldErrors, setFieldErrors] = useState({}); // { field: message }
+  const [fieldErrors, setFieldErrors] = useState({});
   const [busy, setBusy] = useState(false);
-  const [reviewing, setReviewing] = useState(false); // showing the review step
+  const [reviewing, setReviewing] = useState(false);
 
   // The category choices and question limit come from the server, so the app and
   // server can never disagree about them.
@@ -152,7 +151,6 @@ export default function PostItemScreen({ navigation, route }) {
   }, [photos]);
   useEffect(() => () => photosRef.current.forEach((p) => URL.revokeObjectURL(p.uri)), []);
 
-  // Changing a field clears its error message.
   const clearError = (field) => setFieldErrors((fe) => (fe[field] ? { ...fe, [field]: undefined } : fe));
 
   const setQA = (i, field, value) => {

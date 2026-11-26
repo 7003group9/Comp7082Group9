@@ -406,16 +406,13 @@ export async function markHandedOff(req, res) {
   res.json(rows[0]);
 }
 
-// The status changes Campus Security can make by hand (the dropdown on Past posts).
-// 'open' and 'claim pending' follow the claims, so they aren't here. 'handed off' is
-// final. 'dropped off' -> 'claimed' undoes a "received" pressed by mistake.
+// Status changes security can make by hand on Past posts. 'dropped off' -> 'claimed' is the undo.
 export const STATUS_CHANGES = {
   claimed: ["dropped off"],
   "dropped off": ["handed off", "claimed"],
 };
 
-// PATCH /items/:id/status { status } (security only). Only the changes in STATUS_CHANGES
-// (400 otherwise). Handing off also records who and when, like the "Picked up" button.
+// PATCH /items/:id/status (security only). Anything not in STATUS_CHANGES gets 400.
 export async function setStatus(req, res) {
   const to = req.body?.status;
   const {

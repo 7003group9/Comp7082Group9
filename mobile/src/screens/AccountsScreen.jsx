@@ -7,10 +7,8 @@ import { useConfirm, useFocusList } from '../hooks';
 import ErrorRetry from '../components/ErrorRetry';
 import { colors, spacing, type, ui } from '../theme';
 
-// Campus Security only: people who are locked out of claiming (3 rejected claims) or
-// suspended. A locked-out person can't make claims, so they never appear in Review
-// claims; this is where staff find them after checking their proof at the desk.
-// Suspending is done from a claim (ClaimDetailScreen). Each button needs a second tap.
+// Campus Security only: locked out and suspended accounts, with unlock and unsuspend.
+// Suspending happens from a claim (ClaimDetailScreen).
 export default function AccountsScreen() {
   const { user } = useContext(AuthContext);
   const { list: users, setList: setUsers, loading, error, setError, failed, reload } = useFocusList(

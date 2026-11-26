@@ -25,7 +25,7 @@ export default function HistoryScreen() {
   const { user } = useContext(AuthContext);
   const load = useCallback(() => fetchHistory(user.token), [user.token]);
   const { list: items, setList: setItems, loading, error, setError, failed, reload } = useFocusList(load);
-  const [openId, setOpenId] = useState(null); // the item whose dropdown is open
+  const [openId, setOpenId] = useState(null);
   const [confirm, setConfirm] = useConfirm(); // "<item id>:<status>" waiting for a second tap
   const [busyId, setBusyId] = useState(null);
 
