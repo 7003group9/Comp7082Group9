@@ -6,18 +6,13 @@ import {
   unhidePost as unhide,
 } from '../services/reports.service.js';
 
+// POST /items/:id/report { reason, details? }. The route has already checked the id is a
+// number; createReport checks the reason is one of REPORT_REASONS (400 otherwise).
 export async function submitReport(req, res) {
-  const itemId = Number(req.params.id);
-  if (!Number.isInteger(itemId) || itemId <= 0) {
-    return res.status(400).json({ error: 'Invalid item id' });
-  }
-  const reason = String(req.body?.reason ?? '').trim();
-  if (!reason) return res.status(400).json({ error: 'A reason is required.' });
-
   const report = await createReport({
-    itemId,
+    itemId: Number(req.params.id),
     reporterId: req.user.id,
-    reason,
+    reason: String(req.body?.reason ?? '').trim(),
     details: req.body?.details,
   });
   res.status(201).json({ ok: true, report });

@@ -5,12 +5,14 @@ import {
   BUILDINGS,
   CATEGORIES,
   MAX_OPEN_POSTS,
+  MAX_PHOTOS,
+  MAX_PHOTO_BYTES,
   MAX_QUESTIONS,
+  PHOTO_TYPES,
   checkItem,
   clean,
-  coord,
 } from "../services/itemValidation.js";
-import { getItemById, updateItem as updateItemService } from "../services/items.service.js";
+import { REPORT_REASONS } from "../services/reports.service.js";
 
 // Public fields ONLY. Private questions/answers are never selected here.
 // flaggedUnclaimed: still unclaimed 30+ days after posting. Worked out on each read, so it's never stale.
@@ -53,7 +55,7 @@ export async function listItems(req, res) {
   const q = clean(req.query.q, 100);
   const category = clean(req.query.category, 50);
   const location = clean(req.query.location, 100);
-  const dateFrom = req.query.dateFrom ?? req.query.date ?? "";
+  const dateFrom = req.query.dateFrom ?? "";
   const dateTo = req.query.dateTo ?? "";
 
   const before = /^\d{1,9}$/.test(req.query.before ?? "")
@@ -116,13 +118,18 @@ export async function listItems(req, res) {
     hasMore: rows.length > PAGE_SIZE,
   });
 }
-// GET /items/options: what the post form and filters offer. The app builds its
-// pickers from this, so CATEGORIES, BUILDINGS and MAX_QUESTIONS are the only places to edit.
+// GET /items/options: the lists and limits the app's forms use (post form, filters,
+// report form). The app reads them from here, so the server constants are the only
+// place to edit them.
 export const getFormOptions = (req, res) =>
   res.json({
     categories: CATEGORIES,
     buildings: BUILDINGS,
     maxQuestions: MAX_QUESTIONS,
+    maxPhotos: MAX_PHOTOS,
+    maxPhotoMb: MAX_PHOTO_BYTES / 1024 / 1024,
+    photoTypes: PHOTO_TYPES,
+    reportReasons: REPORT_REASONS,
   });
 
 export async function getItem(req, res) {
@@ -133,53 +140,6 @@ export async function getItem(req, res) {
   );
   if (!rows[0]) return res.status(404).json({ error: "Item not found" });
   res.json(rows[0]);
-}
-
-// PUT /items/:id: only the student who found an item may edit it.
-// This compatibility handler preserves partial edits from the earlier API.
-export async function editItem(req, res) {
-  const item = await getItemById(req.params.id);
-  if (!item) return res.status(404).json({ error: 'Item not found' });
-  if (item.finder_id !== req.user.id) {
-    return res.status(403).json({ error: 'You can only edit your own posts' });
-  }
-
-  const body = req.body ?? {};
-  const changes = {};
-  if (body.title !== undefined) changes.title = clean(body.title);
-  if (body.category !== undefined) changes.category = clean(body.category, 50);
-  if (body.location !== undefined) changes.location = clean(body.location);
-  if (body.building !== undefined) changes.building = clean(body.building, 50) || null;
-  if (body.latitude !== undefined) changes.latitude = coord(body.latitude, 90);
-  if (body.longitude !== undefined) changes.longitude = coord(body.longitude, 180);
-  if (changes.category !== undefined && !CATEGORIES.includes(changes.category)) {
-    return res.status(400).json({ error: `Pick one of: ${CATEGORIES.join(', ')}.` });
-  }
-  if (changes.building && !BUILDINGS.includes(changes.building)) {
-    return res.status(400).json({ error: 'Pick a building from the list.' });
-  }
-  if (changes.title !== undefined && !changes.title) {
-    return res.status(400).json({ error: 'Say what the item is.' });
-  }
-  if (changes.location !== undefined && !changes.location) {
-    return res.status(400).json({ error: 'Describe where you found it.' });
-  }
-  if (body.latitude !== undefined || body.longitude !== undefined) {
-    const hasCompletePin = body.latitude !== undefined
-      && body.longitude !== undefined
-      && changes.latitude !== null
-      && changes.longitude !== null;
-    if (!hasCompletePin) {
-      return res.status(400).json({ error: 'That GPS position is not valid. Try again.' });
-    }
-  }
-  if (!Object.keys(changes).length) {
-    return res.status(400).json({ error: 'Provide at least one field to update' });
-  }
-
-  const updated = await updateItemService(req.params.id, changes);
-  if (!updated) return res.status(409).json({ error: LOCKED });
-  res.json(updated);
 }
 
 // The three WebP copies we store instead of the upload (this also drops its GPS/camera data).
@@ -304,9 +264,12 @@ export async function createItem(req, res) {
 }
 
 // GET /items/mine: everything the logged-in user posted. hidden: Campus Security hid it.
+// editable: nobody has ever claimed it (even a rejected claim locks it), so it can be edited or deleted.
 export async function listMine(req, res) {
   const { rows } = await query(
-    `SELECT ${PUBLIC_FIELDS}, is_hidden AS hidden FROM items
+    `SELECT ${PUBLIC_FIELDS}, is_hidden AS hidden,
+            NOT EXISTS (SELECT 1 FROM claims WHERE item_id = items.id) AS editable
+     FROM items
      WHERE finder_id = $1 ORDER BY id DESC`,
     [req.user.id],
   );
@@ -358,7 +321,6 @@ export async function getItemForEdit(req, res) {
 // Same rules as posting (checkItem). Photos stay as they are. The item and its
 // questions are replaced in ONE statement, and only if it's still unclaimed.
 export async function updateItem(req, res) {
-  if (req.body?.questions === undefined) return editItem(req, res);
   if (!(await ownItem(req, res, NOT_YOURS))) return;
   const { item, errors } = checkItem(req.body ?? {});
   if (Object.keys(errors).length) return formErrors(res, errors);

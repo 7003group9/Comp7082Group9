@@ -8,6 +8,12 @@ Campus lost and found mobile app (COMP 7082, Team 9).
 ## Run the database
     docker compose up -d db
 
+Docker creates the tables from `server/src/db/schema.sql` the first time it makes the
+database. After pulling a change to `schema.sql`, rebuild it (this deletes all data):
+
+    cd server
+    npm run db:reset     # docker compose down -v, then up -d db
+
 ## Run the server
     cd server
     cp .env.example .env
@@ -16,7 +22,6 @@ Campus lost and found mobile app (COMP 7082, Team 9).
 
 Login is by emailed code (students only, `STUDENT_EMAIL_DOMAIN` in `.env`). Without `SMTP_URL`
 set, the code is printed in the server console instead of emailed.
-If you had the old database, reset it: `docker compose down -v && docker compose up -d db`.
 
 ## Run the mobile app
     cd mobile

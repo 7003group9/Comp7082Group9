@@ -123,6 +123,18 @@ test('claim flow: claim, approve, receive at the desk, hand off', { skip }, asyn
     const done = history.find((i) => i.id === item.id);
     assert.deepEqual([done.status, done.pickedUpBy, done.handedOverBy, done.receivedBy],
       ['handed off', owner.email, staff.email, staff.email]);
+
+    // Notifications (GET /claims/mine): each claimant sees where their own claim ended up,
+    // as an item the app can open, timed by its latest change (the pick-up for the owner).
+    const [, ownerNotes] = await api(base, 'GET', '/claims/mine', owner);
+    const [, otherNotes] = await api(base, 'GET', '/claims/mine', other);
+    const ownerNote = ownerNotes.find((n) => n.id === item.id);
+    assert.deepEqual([ownerNote.myClaim, ownerNote.status, ownerNote.title], ['approved', 'handed off', item.title]);
+    assert.equal(otherNotes.find((n) => n.id === item.id).myClaim, 'rejected');
+    const { rows: [pickup] } = await pool.query(
+      'SELECT h.completed_at FROM handoffs h JOIN claims c ON c.id = h.claim_id WHERE c.item_id = $1', [item.id]);
+    assert.equal(new Date(ownerNote.updatedAt).getTime(), pickup.completed_at.getTime());
+    assert.deepEqual((await api(base, 'GET', '/claims/mine', finder))[1], [], 'the finder made no claims');
   });
 });
 
@@ -130,6 +142,8 @@ test('rejecting the only claim puts the item back to open', { skip }, async () =
   const [finder, claimant, staff] = [await makeUser(), await makeUser(), await makeUser('security')];
   await withServer(async (base) => {
     const item = await postItem(base, finder);
+    const editable = async () => (await api(base, 'GET', '/items/mine', finder))[1].find((i) => i.id === item.id).editable;
+    assert.equal(await editable(), true, 'no claims yet: can edit or delete');
     const [, form] = await api(base, 'GET', `/items/${item.id}/questions`, claimant);
     const [, claim] = await api(base, 'POST', '/claims', claimant, {
       itemId: item.id, answers: [{ questionId: form.questions[0].id, answer: 'Green' }],
@@ -137,6 +151,38 @@ test('rejecting the only claim puts the item back to open', { skip }, async () =
     assert.equal((await api(base, 'POST', `/claims/${claim.id}/decision`, staff, { decision: 'rejected' }))[0], 200);
     assert.equal(await itemStatus(item.id), 'open');
     assert.equal((await api(base, 'GET', `/items/${item.id}/questions`, claimant))[1].myClaim, 'rejected');
+    // Open again, but the rejected claim locks it, so My posts mustn't offer Edit/Delete.
+    assert.equal(await editable(), false);
+    assert.equal((await api(base, 'DELETE', `/items/${item.id}`, finder))[0], 409, 'the server agrees');
+  });
+});
+
+test('editing a post: the whole form, and only until someone claims it', { skip }, async () => {
+  const [finder, claimant, stranger] = [await makeUser(), await makeUser(), await makeUser()];
+  await withServer(async (base) => {
+    const item = await postItem(base, finder);
+    const form = {
+      title: `Edited wallet ${run}`, location: 'Cafeteria', latitude: 49.25, longitude: -123, category: 'Other',
+      questions: [{ question: 'What brand?', answer: 'Fossil' }],
+    };
+    const edit = (who, body) => api(base, 'PUT', `/items/${item.id}`, who, body);
+
+    assert.equal((await edit(stranger, form))[0], 403, "only the finder can edit");
+    const [st, edited] = await edit(finder, form);
+    assert.equal(st, 200);
+    assert.equal(edited.title, form.title);
+    const [, filled] = await api(base, 'GET', `/items/${item.id}/edit`, finder);
+    assert.deepEqual(filled.questions, [{ question: 'What brand?', answer: 'Fossil' }], 'questions replaced');
+
+    // Edits always send the whole form; leaving out the questions is a 400, not a partial edit.
+    const { questions, ...noQuestions } = form; // eslint-disable-line no-unused-vars
+    assert.equal((await edit(finder, { title: 'Just the title' }))[0], 400);
+    assert.equal((await edit(finder, noQuestions))[0], 400);
+
+    // Once claimed, the questions can't change under the claim.
+    const [, claimForm] = await api(base, 'GET', `/items/${item.id}/questions`, claimant);
+    await api(base, 'POST', '/claims', claimant, { itemId: item.id, answers: [{ questionId: claimForm.questions[0].id, answer: 'Fossil' }] });
+    assert.equal((await edit(finder, form))[0], 409);
   });
 });
 

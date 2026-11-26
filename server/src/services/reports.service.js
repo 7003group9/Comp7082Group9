@@ -110,7 +110,7 @@ export async function hideReportedPost(itemId, adminId) {
     );
     await client.query(
       `UPDATE post_reports
-       SET status = 'resolved', resolution = 'hidden',
+       SET status = 'hidden',
            resolved_by = $2, resolved_at = now()
        WHERE item_id = $1 AND status = 'open'`,
       [itemId, adminId]
@@ -153,7 +153,7 @@ export async function dismissReport(itemId, adminId) {
     await client.query('BEGIN');
     const result = await client.query(
       `UPDATE post_reports
-       SET status = 'dismissed', resolution = 'dismissed',
+       SET status = 'dismissed',
            resolved_by = $2, resolved_at = now()
        WHERE item_id = $1 AND status = 'open'
        RETURNING id`,

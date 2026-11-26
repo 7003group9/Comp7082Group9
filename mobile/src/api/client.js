@@ -2,9 +2,9 @@
 const API_URL = import.meta.env.VITE_API_URL;
 
 // An item's photo as a local blob: URL for <Image source={{ uri }}>. Fetched with the
-// login token because the server only gives the finder and Campus Security the clear
-// photo (a plain <Image src> can't send the token). Revoke the URL when done; usePhoto does.
-// thumb: a small copy for feed cards instead of the full-size original.
+// login token because the server only gives the finder, Campus Security and the approved
+// owner the clear photo (a plain <Image src> can't send the token). Revoke the URL when
+// done; usePhoto does. thumb: the small copy for feed cards instead of the large one.
 export async function fetchPhotoUrl(itemId, token, thumb = false) {
   const res = await fetch(`${API_URL}/items/${itemId}/photo${thumb ? '?size=thumb' : ''}`, {
     headers: token ? { Authorization: `Bearer ${token}` } : {},
@@ -54,8 +54,9 @@ async function send(method, path, body, token) {
 const post = (path, body, token) => send("POST", path, body, token);
 
 // The newest public items, one page at a time: { items, hasMore }.
-// q = search text, category = a category name or "All", before = the id of the
-// last item already shown (to get the next page). The server does the filtering.
+// q = search text, category = a category name or "All", location = a building,
+// dateFrom/dateTo = YYYY-MM-DD, before = the id of the last item already shown (to get
+// the next page). Empty filters are left out. The server does the filtering.
 // With the login token, the user's own posts are left out (they're in My posts).
 export function fetchItems({
   q,
@@ -76,8 +77,8 @@ export function fetchItems({
 
   return send("GET", `/items?${params}`, undefined, token);
 }
-// What the post form and filters offer: { categories, buildings, maxQuestions }.
-// The server is the one place these live.
+// The lists and limits the forms use: { categories, buildings, maxQuestions, maxPhotos,
+// maxPhotoMb, photoTypes, reportReasons }. The server is the one place these live.
 export const fetchOptions = () => send("GET", "/items/options");
 
 // Login step 1: the server emails a code to this student email and replies
@@ -92,7 +93,7 @@ export const verifyCode = (email, code, challenge) =>
 export const guestLogin = () => post("/auth/guest");
 
 // Post a found item: { title, category, location, building?, latitude, longitude, questions: [{ question, answer }] },
-// plus an optional photo (a File object in photos), which is sent as a multipart form.
+// plus its photo (a File object in photos; the server requires one), sent as a multipart form.
 export function createItem({ photos = [], ...item }, token) {
   if (!photos.length) return post("/items", item, token);
   const form = new FormData();
@@ -111,16 +112,21 @@ export const fetchMyItems = (token) => send("GET", "/items/mine", undefined, tok
 export const fetchItem = (id) => send("GET", `/items/${id}`);
 
 // The claim form for an item: { questions: [{ id, question }], myClaim, itemStatus }. myClaim is
-// 'pending', 'approved' or 'rejected' if you already claimed it (one try per item), else null;
+// 'pending', 'approved', 'rejected' or 'post hidden' if you already claimed it (one try per item), else null;
 // itemStatus then says whether the item is at the security desk yet ('dropped off').
 export const fetchClaimForm = (itemId, token) => send("GET", `/items/${itemId}/questions`, undefined, token);
+
+// Your claims for Notifications, latest change first: each is an item (same shape as the
+// feed, so it can be opened) plus myClaim (the claim's status) and updatedAt.
+export const fetchMyClaims = (token) => send("GET", "/claims/mine", undefined, token);
 
 // Claim an item: answers = [{ questionId, answer }]. Campus Security checks them later.
 export const submitClaim = (itemId, answers, token) => post("/claims", { itemId, answers }, token);
 
 // Campus Security only: pending claims with each answer beside the expected one, plus
 // approved claims whose item hasn't been picked up yet (status 'approved'; itemStatus 'claimed' or 'dropped off').
-// [{ id, status, itemId, itemStatus, title, location, building, claimantEmail, answers: [{ question, expected, answer }] }].
+// [{ id, status, itemId, itemStatus, title, location, building, claimantId, claimantEmail, claimantSuspended,
+//    rejectedBefore, decidedBy, decidedAt, answers: [{ questionId, question, expected, answer }] }].
 export const fetchClaimsToReview = (token) => send("GET", "/claims/review", undefined, token);
 
 // Campus Security only: decision is "approved" or "rejected".
@@ -132,7 +138,8 @@ export const decideClaim = (claimId, decision, token) => post(`/claims/${claimId
 export const fetchItemForEdit = (id, token) => send("GET", `/items/${id}/edit`, undefined, token);
 export const updateItem = (id, item, token) => send("PUT", `/items/${id}`, item, token);
 
-// Campus Security only: the finder handed this claimed item in at the desk. Final.
+// Campus Security only: the finder handed this claimed item in at the desk. Records who and
+// when. A mistake can be undone from Past posts (setItemStatus back to 'claimed').
 export const markReceived = (itemId, token) => post(`/items/${itemId}/received`, undefined, token);
 
 // Campus Security only: the owner picked the item up at the desk. Records who and when. Final.

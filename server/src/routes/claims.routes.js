@@ -12,6 +12,6 @@ router.param('id', (req, res, next, id) =>
 // 5 claims a minute per person, so nobody can fire off claims to guess answers.
 router.post('/', requireAuth, requireNonGuest, rateLimit('claim', { key: (req) => req.user.id }), createClaim);
 router.get('/review', ...security, claimsToReview);
-router.get('/mine', requireAuth, myClaims);
+router.get('/mine', requireAuth, myClaims); // guests just get [] (they can't claim)
 router.post('/:id/decision', ...security, decideClaim);
 export default router;

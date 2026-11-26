@@ -43,7 +43,8 @@ export function useConfirm() {
 }
 
 // A list loaded from the server every time the screen is shown.
-// load must be stable (wrap it in useCallback). Returns { list, setList, loading, error, setError }.
+// load must be stable (wrap it in useCallback). Returns { list, setList, loading, error,
+// setError, failed, reload }: failed means the list itself didn't load (show Try again).
 export function useFocusList(load) {
   const [list, setList] = useState([]);
   const [loading, setLoading] = useState(true);
