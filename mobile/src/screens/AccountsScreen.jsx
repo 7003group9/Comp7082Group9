@@ -76,7 +76,7 @@ export default function AccountsScreen() {
         <View style={styles.card}>
           <Text style={type.heading}>{person.email ?? `Guest #${person.id}`}</Text>
           {person.suspendedAt ? (
-            <Text style={styles.warn}>Suspended on {postedAt(person.suspendedAt)}</Text>
+            <Text style={styles.warn}>Suspended on {postedAt(person.suspendedAt)}{person.suspendedBy ? ` by ${person.suspendedBy}` : ''}</Text>
           ) : null}
           {person.locked ? (
             <Text style={styles.warn}>Locked out: {person.rejected} claims rejected</Text>

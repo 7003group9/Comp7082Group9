@@ -153,6 +153,7 @@ test('posting an item needs login and a complete form', () =>
     await rejected({ location: '' }, 'location');
     await rejected({ category: 'Pets' }, 'category');
     await rejected({ questions: [{ question: 'What sticker?', answer: '' }] }, 'questions');
+    await rejected({}, 'photos'); // a complete form with no photo
   }));
 
 test('posting rejects photos that are not images', () =>
@@ -295,6 +296,10 @@ test('only Campus Security can access the moderation queue and actions', () =>
       headers: as('student'),
     }), 403);
     assert.equal(await status(`${base}/reports/1/dismiss`, {
+      method: 'POST',
+      headers: as('student'),
+    }), 403);
+    assert.equal(await status(`${base}/reports/1/unhide`, {
       method: 'POST',
       headers: as('student'),
     }), 403);

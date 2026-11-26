@@ -202,6 +202,7 @@ export default function PostItemScreen({ navigation, route }) {
   function review() {
     setError("");
     const errors = checkForm({ title, location, pin, questions });
+    if (!editId && !photos.length) errors.photos = "Add a photo of the item."; // edits can't change photos
     setFieldErrors(errors);
     if (Object.keys(errors).length) return setError("Fix the fields marked above first.");
     setReviewing(true);
@@ -395,7 +396,7 @@ export default function PostItemScreen({ navigation, route }) {
 
       {editId ? null : (
         <>
-          <Label style={styles.gap}>Photograph</Label>
+          <Label required style={styles.gap}>Photograph</Label>
           <Text style={type.meta}>
             Don't show anything that gives away your private answers, like a sticker or what's inside.
           </Text>

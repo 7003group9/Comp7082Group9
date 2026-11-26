@@ -4,7 +4,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { fetchPhotoUrl } from './api/client';
 import { AuthContext } from './context/AuthContext';
 
-// An item's photo as a uri for <Image>, or null while loading / if it has none.
+// An item's photo as a uri for <Image>: null while loading (or if it has none), false if it failed to load.
 // The server decides clear or blurred from the login, so this sends the token.
 // The blob URL is freed when the component goes away. thumb: the small copy, for cards.
 export function usePhoto(itemId, hasPhoto, thumb = false) {
@@ -20,7 +20,7 @@ export function usePhoto(itemId, hasPhoto, thumb = false) {
         url = u;
         setUri(u);
       })
-      .catch(() => {}); // no photo is better than an error on a card
+      .catch(() => !cancelled && setUri(false)); // no photo is better than an error on a card
     return () => {
       cancelled = true;
       if (url) URL.revokeObjectURL(url);

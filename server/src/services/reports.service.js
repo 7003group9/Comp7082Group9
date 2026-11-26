@@ -97,8 +97,15 @@ export async function hideReportedPost(itemId, adminId) {
       throw httpError('No open reports found for this item.', 404);
     }
 
+    // Close any pending claims and set the item back to open.
     await client.query(
-      `UPDATE items SET is_hidden = TRUE WHERE id = $1`,
+      `UPDATE claims SET status = 'post hidden' WHERE item_id = $1 AND status = 'pending'`,
+      [itemId]
+    );
+    await client.query(
+      `UPDATE items SET is_hidden = TRUE, hidden_at = now(),
+              status = CASE WHEN status = 'claim pending' THEN 'open' ELSE status END
+       WHERE id = $1`,
       [itemId]
     );
     await client.query(
@@ -115,6 +122,29 @@ export async function hideReportedPost(itemId, adminId) {
   } finally {
     client.release();
   }
+}
+
+// Undo a hide: make the post public again and reopen the claims the hide closed.
+// Returns how many claims were reopened.
+export async function unhidePost(itemId) {
+  const { rows } = await query(
+    `WITH item AS (
+       UPDATE items SET is_hidden = FALSE, hidden_at = NULL,
+              status = CASE WHEN status = 'open' AND EXISTS (
+                         SELECT 1 FROM claims WHERE item_id = $1 AND status = 'post hidden')
+                       THEN 'claim pending' ELSE status END
+       WHERE id = $1 AND is_hidden
+       RETURNING id
+     ), reopened AS (
+       UPDATE claims SET status = 'pending'
+       WHERE item_id IN (SELECT id FROM item) AND status = 'post hidden'
+       RETURNING id
+     )
+     SELECT (SELECT count(*)::int FROM item) AS found, (SELECT count(*)::int FROM reopened) AS reopened`,
+    [itemId]
+  );
+  if (!rows[0].found) throw httpError('That post is not hidden.', 404);
+  return rows[0].reopened;
 }
 
 export async function dismissReport(itemId, adminId) {

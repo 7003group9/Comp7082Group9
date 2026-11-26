@@ -81,6 +81,9 @@ export default function ClaimDetailScreen({ route }) {
       <Text style={type.heading}>{claim.title}</Text>
       <Text style={type.meta}>{where(claim)}</Text>
       <StatusLabel claim={claim.status} />
+      {claim.decidedBy ? (
+        <Text style={type.meta}>Approved by {claim.decidedBy} on {postedAt(claim.decidedAt)}</Text>
+      ) : null}
 
       <Text style={styles.section}>Item</Text>
       {item ? (
@@ -96,9 +99,8 @@ export default function ClaimDetailScreen({ route }) {
               <Text style={styles.link}>View on map</Text>
             </Pressable>
           ) : null}
-          {/* Clear for Campus Security, to compare with the answers. Items without a
-              photo get a 404, and ItemPhoto then shows nothing. */}
-          <ItemPhoto itemId={claim.itemId} title={claim.title} />
+          {/* Clear for Campus Security, to compare with the answers. */}
+          <ItemPhoto itemId={claim.itemId} hasPhoto={item.hasPhoto} title={claim.title} />
         </>
       ) : (
         item === false ? (

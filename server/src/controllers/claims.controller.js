@@ -41,7 +41,7 @@ async function lockedOut(userId) {
 // GET /items/:id/questions: what the claim form asks. Question text ONLY; the
 // expected answers never leave the server. Reply: { questions: [{ id, question }],
 // myClaim, itemStatus }, where myClaim is this user's claim status if they already claimed it
-// ('pending', 'approved' or 'rejected'; questions is then empty), else null. itemStatus
+// ('pending', 'approved', 'rejected' or 'post hidden'; questions is then empty), else null. itemStatus
 // lets an approved claimant see when the item is 'dropped off' (ready to pick up).
 // Someone locked out (too many rejected claims) gets 403 { error, locked: true }.
 export async function claimForm(req, res) {
@@ -118,14 +118,16 @@ export async function claimsToReview(req, res) {
             json_agg(json_build_object('questionId', q.id, 'question', q.question,
                      'expected', q.expected_answer, 'answer', a.answer) ORDER BY q.id) AS answers,
             (SELECT count(*)::int FROM claims r
-             WHERE r.claimant_id = c.claimant_id AND r.status = 'rejected') AS "rejectedBefore"
+             WHERE r.claimant_id = c.claimant_id AND r.status = 'rejected') AS "rejectedBefore",
+            d.school_email AS "decidedBy", c.decided_at AS "decidedAt"
      FROM claims c
      JOIN items i ON i.id = c.item_id
      JOIN users u ON u.id = c.claimant_id
+     LEFT JOIN users d ON d.id = c.decided_by
      JOIN claim_answers a ON a.claim_id = c.id
      JOIN item_questions q ON q.id = a.question_id
      WHERE c.status = 'pending' OR (c.status = 'approved' AND i.status IN ('claimed', 'dropped off'))
-     GROUP BY c.id, i.id, u.id
+     GROUP BY c.id, i.id, u.id, d.id
      ORDER BY c.id`
   );
   res.json(rows);
@@ -143,10 +145,11 @@ export async function decideClaim(req, res) {
   try {
     const { rows } = await query(
       `WITH claim AS (
-         UPDATE claims SET status = $2 WHERE id = $1 AND status = 'pending'
+         UPDATE claims SET status = $2, decided_by = $3, decided_at = now()
+         WHERE id = $1 AND status = 'pending'
          RETURNING id, item_id, status
        ), others AS (
-         UPDATE claims SET status = 'rejected' FROM claim
+         UPDATE claims SET status = 'rejected', decided_by = $3, decided_at = now() FROM claim
          WHERE claim.status = 'approved' AND claims.item_id = claim.item_id
            AND claims.id <> claim.id AND claims.status = 'pending'
        ), item AS (
@@ -159,7 +162,7 @@ export async function decideClaim(req, res) {
                                AND c.id <> claim.id AND c.status IN ('pending', 'approved')))
        )
        SELECT id, status FROM claim`,
-      [req.params.id, decision]
+      [req.params.id, decision, req.user.id]
     );
     if (!rows[0]) return res.status(409).json({ error: 'This claim was already decided, or does not exist.' });
     res.json(rows[0]);
