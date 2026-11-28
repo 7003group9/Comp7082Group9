@@ -1,10 +1,10 @@
 import nodemailer from 'nodemailer';
-import { SMTP_URL, MAIL_FROM } from '../config/env.js';
+import { DEMO, SMTP_URL, MAIL_FROM } from '../config/env.js';
 
 // Without SMTP_URL, codes are printed in the server console (handy in dev). In
 // production that would mean nobody gets an email and anyone who can read the
-// log could log in as anyone, so refuse to start instead.
-if (!SMTP_URL && process.env.NODE_ENV === 'production') {
+// log could log in as anyone, so refuse to start instead (except on the demo).
+if (!SMTP_URL && process.env.NODE_ENV === 'production' && !DEMO) {
   throw new Error('SMTP_URL must be set when NODE_ENV=production');
 }
 const transport = SMTP_URL ? nodemailer.createTransport(SMTP_URL) : null;

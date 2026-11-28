@@ -591,6 +591,18 @@ test('the server refuses to start in production with the public default token se
   assert.equal(start('x'.repeat(40)), 0); // a real secret is fine
 });
 
+test('production refuses test logins and console codes unless DEMO=true', () => {
+  const start = (env) =>
+    spawnSync(process.execPath, ['-e', "import('./src/services/mailer.js')"], {
+      env: { PATH: process.env.PATH, NODE_ENV: 'production', JWT_SECRET: 'x'.repeat(40), ...env },
+    }).status;
+  const testLogins = { TEST_LOGINS: 'admin@my.bcit.ca:999999' };
+  assert.notEqual(start({ SMTP_URL: 'smtp://localhost', ...testLogins }), 0);
+  assert.notEqual(start({}), 0); // no SMTP_URL
+  assert.equal(start({ SMTP_URL: 'smtp://localhost' }), 0);
+  assert.equal(start({ DEMO: 'true', ...testLogins }), 0);
+});
+
 test('login emails with a "+" alias are refused', () =>
   withServer(async (base) => {
     resetRateLimits();
