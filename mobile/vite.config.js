@@ -5,6 +5,8 @@ import react from '@vitejs/plugin-react';
 // renders them as normal HTML in the browser.
 export default defineConfig({
   plugins: [react()],
+  // Relative asset paths, so the build works at any address (GitHub Pages serves it under /<repo>/).
+  base: './',
   // react-native-web's animations reference Node's `global`; point it at the browser's.
   define: { global: 'globalThis' },
   resolve: {

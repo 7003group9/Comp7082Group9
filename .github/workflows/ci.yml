@@ -77,3 +77,73 @@ jobs:
         working-directory: mobile
       - run: npm run lint
         working-directory: mobile
+
+  # Only on a push to main, and only once every check above has passed.
+  deploy-api:
+    name: Deploy API (Render)
+    needs: [server-lint, server-test, mobile-build]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    concurrency: deploy-api
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+      - run: npm ci
+        working-directory: server
+      # Creates any missing tables (every table is CREATE TABLE IF NOT EXISTS, so it's safe to rerun).
+      - run: npm run db:init
+        working-directory: server
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      # The demo's Campus Security account. Only while the repo variable DEMO is 'true'
+      # (match DEMO on Render); a real launch must not hand out a security account.
+      - if: vars.DEMO == 'true'
+        run: npm run make-security -- admin@my.bcit.ca
+        working-directory: server
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      - name: Trigger the Render deploy
+        run: curl -fsS -X POST "${{ secrets.RENDER_DEPLOY_HOOK }}"
+      # Wait until the live /health reports this commit (the free tier can take several minutes).
+      - name: Check the deployed commit
+        run: |
+          for i in $(seq 60); do
+            live=$(curl -fsS "${{ vars.API_URL }}/health" | jq -r .commit || true)
+            echo "Live commit: $live"
+            [ "$live" = "$GITHUB_SHA" ] && exit 0
+            sleep 15
+          done
+          echo "Render is not running $GITHUB_SHA after 15 minutes" && exit 1
+
+  deploy-app:
+    name: Deploy app (GitHub Pages)
+    needs: deploy-api
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.pages.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+      - run: npm ci
+        working-directory: mobile
+      - run: npm run build
+        working-directory: mobile
+        env:
+          VITE_API_URL: ${{ vars.API_URL }}
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: mobile/dist
+      - id: pages
+        uses: actions/deploy-pages@v4
