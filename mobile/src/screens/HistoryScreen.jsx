@@ -76,7 +76,7 @@ export default function HistoryScreen() {
               accessibilityRole="button"
               accessibilityLabel={`Unhide ${item.title}`}
             >
-              <Text style={[type.body, confirm === `${item.id}:unhide` && styles.armedText]}>
+              <Text style={[styles.optionText, confirm === `${item.id}:unhide` && styles.armedText]}>
                 {confirm === `${item.id}:unhide` ? 'Tap again to unhide' : 'Unhide post (reopens its claims)'}
               </Text>
             </Pressable>
@@ -101,7 +101,7 @@ export default function HistoryScreen() {
                         disabled={busyId === item.id}
                         accessibilityRole="button"
                       >
-                        <Text style={[type.body, armed && styles.armedText]}>{armed ? 'Tap again to confirm' : label}</Text>
+                        <Text style={[styles.optionText, armed && styles.armedText]}>{armed ? 'Tap again to confirm' : label}</Text>
                       </Pressable>
                     );
                   })
@@ -136,6 +136,7 @@ const styles = StyleSheet.create({
   pickup: { ...type.body, fontWeight: '600', marginTop: spacing.sm },
   change: { color: colors.accent, fontWeight: '600', marginTop: spacing.sm },
   option: { borderWidth: 2, borderColor: colors.accent, borderRadius: 8, padding: spacing.sm, marginTop: spacing.xs },
+  optionText: { ...type.body, color: colors.accent, fontWeight: '600' },
   armed: { backgroundColor: colors.accent },
   armedText: { color: colors.onAccent, fontWeight: '700' },
 });
