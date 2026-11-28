@@ -10,7 +10,8 @@
     "coverage": "node --test --experimental-test-coverage --test-coverage-exclude=tests/**",
     "lint": "node scripts/lint.js",
     "db:init": "node scripts/init-db.js",
-    "db:reset": "docker compose -f ../docker-compose.yml down -v && docker compose -f ../docker-compose.yml up -d db"
+    "db:reset": "docker compose -f ../docker-compose.yml down -v && docker compose -f ../docker-compose.yml up -d db",
+    "make-security": "node scripts/make-security.js"
   },
   "dependencies": {
     "cors": "^2.8.6",
@@ -19,5 +20,8 @@
     "nodemailer": "^10.0.16",
     "pg": "^8.23.1",
     "sharp": "^0.35.5"
+  },
+  "engines": {
+    "node": ">=22"
   }
 }

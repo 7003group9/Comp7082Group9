@@ -14,8 +14,8 @@ const app = express();
 app.use(cors()); // allow the mobile app / browser to call the API
 app.use(express.json()); // parse JSON request bodies
 
-// Simple liveness check.
-app.get('/health', (req, res) => res.json({ ok: true }));
+// Liveness check. On Render it also says which commit is running, so CI can confirm the deploy.
+app.get('/health', (req, res) => res.json({ ok: true, commit: process.env.RENDER_GIT_COMMIT }));
 app.use(rejectSuspended); // a suspended user's token works nowhere
 app.use('/auth', auth);
 app.use('/items', items);
