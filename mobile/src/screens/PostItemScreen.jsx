@@ -306,7 +306,7 @@ export default function PostItemScreen({ navigation, route }) {
         {error ? <Text style={styles.error}>{error}</Text> : null}
 
         <Pressable style={[styles.button, busy && styles.disabled]} onPress={submit} disabled={busy}>
-          <Text style={styles.buttonText}>{busy ? "Saving..." : editId ? "Save changes" : "Submit"}</Text>
+          <Text style={styles.buttonText}>{busy ? "Saving..." : editId ? "Save changes" : "Post found item"}</Text>
         </Pressable>
         <Pressable style={[styles.secondary, busy && styles.disabled]} onPress={edit} disabled={busy}>
           <Text style={styles.secondaryText}>Edit</Text>
@@ -446,7 +446,7 @@ export default function PostItemScreen({ navigation, route }) {
       {error ? <Text style={styles.error}>{error}</Text> : null}
 
       <Pressable style={[styles.button, busy && styles.disabled]} onPress={review} disabled={busy}>
-        <Text style={styles.buttonText}>{editId ? "Review changes" : "Post lost item"}</Text>
+        <Text style={styles.buttonText}>{editId ? "Review changes" : "Review post"}</Text>
       </Pressable>
     </ScrollView>
   );
