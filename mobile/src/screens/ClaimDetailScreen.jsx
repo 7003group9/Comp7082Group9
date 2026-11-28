@@ -10,9 +10,7 @@ import { useConfirm } from '../hooks';
 import { colors, spacing, type, ui } from '../theme';
 
 
-// One claim opened from Review claims, with what the list doesn't show: the item's
-// details and how many of this claimant's earlier claims were rejected. Staff can
-// also suspend the claimant from here (undone on the Locked out & suspended screen).
+// One claim from Review claims: the item, the claimant's past rejections, and a suspend button.
 export default function ClaimDetailScreen({ route }) {
   const { user } = useContext(AuthContext);
   const [claim, setClaim] = useState(route.params.claim);

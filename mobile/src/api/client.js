@@ -13,18 +13,14 @@ export async function fetchPhotoUrl(itemId, token, thumb = false) {
   return URL.createObjectURL(await res.blob());
 }
 
-// Called when the server rejects our login token (expired, invalid, or the account was
-// suspended) so the app can send the user back to the login screen, with the server's
-// reason when it gave one. AuthProvider sets it.
+// Set by AuthProvider. Sends the user back to login when the server refuses their token.
 let onSessionExpired = () => {};
 export const setSessionExpiredHandler = (fn) => {
   onSessionExpired = fn;
 };
 
 // Call the API and return the parsed reply ({} when there is no body);
-// throws the server's error message, with err.fields = { field: message } when
-// the server said which fields were wrong. Pass the login token for protected routes.
-// A FormData body (posts with photos) is sent as a multipart form.
+// throws the server's error message, with err.fields when it says which fields were wrong.
 async function send(method, path, body, token) {
   if (!API_URL) throw new Error("API URL is not configured");
   const form = body instanceof FormData; // the browser sets the multipart header itself
@@ -149,18 +145,17 @@ export const markHandedOff = (itemId, token) => post(`/items/${itemId}/handed-of
 // pickedUpBy, pickedUpAt and handedOverBy.
 export const fetchHistory = (token) => send("GET", "/items/history", undefined, token);
 
-// Campus Security only: change an item's status by hand ('dropped off', 'handed off', or
-// back to 'claimed' to undo a mistaken "received"). The server only allows those changes.
+// Campus Security only: change an item's status from Past posts.
 export const setItemStatus = (itemId, status, token) => send("PATCH", `/items/${itemId}/status`, { status }, token);
 
 // Delete one of your own posts.
 export const deleteItem = (id, token) => send("DELETE", `/items/${id}`, undefined, token);
 
-// Campus Security only: accounts that are locked out of claiming (3 rejected claims since
-// their last unlock) or suspended: [{ id, email, role, suspendedAt, rejected, locked }].
+// Campus Security only: locked out or suspended accounts
+// [{ id, email, role, suspendedAt, suspendedBy, rejected, locked }].
 export const fetchRestrictedUsers = (token) => send("GET", "/users/restricted", undefined, token);
 
-// Campus Security only: let a locked-out person claim again (their old rejections stop counting).
+// Campus Security only: let a locked-out person claim again.
 export const unlockUser = (userId, token) => post(`/users/${userId}/unlock`, undefined, token);
 
 // Campus Security only: suspend an account (logged out, can't log back in) or restore it.

@@ -1,9 +1,7 @@
 import { query } from '../config/db.js';
 
-// Ids of suspended users, kept in memory so requireAuth can check every request
-// without a database query. The database (users.suspended_at) is the real record:
-// index.js loads it at startup, and suspend/unsuspend update both.
-// Like loginCodes.js, this only works with one server process.
+// Suspended user ids kept in memory so rejectSuspended can check every request without
+// hitting the database. Loaded at startup; only works with one server process.
 const suspended = new Set();
 
 export const isSuspended = (userId) => suspended.has(userId);

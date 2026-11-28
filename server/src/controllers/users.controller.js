@@ -2,12 +2,10 @@ import { query } from '../config/db.js';
 import { MAX_REJECTED_CLAIMS } from './claims.controller.js';
 import { setSuspended } from '../services/suspensions.js';
 
-// Campus Security managing accounts: who is locked out of claiming or suspended,
-// unlocking a claimant, and suspending or restoring an account. All security only.
+// Campus Security account tools: locked out and suspended users.
 
-// GET /users/restricted: everyone locked out (MAX_REJECTED_CLAIMS rejected claims since
-// their last unlock) or suspended, newest problem first. Locked-out people can't make
-// claims, so they never show up in Review claims; this is where staff find them.
+// GET /users/restricted: everyone locked out or suspended. Locked-out people can't claim,
+// so this is the only place staff see them.
 export async function restrictedUsers(req, res) {
   const { rows } = await query(
     `SELECT id, school_email AS email, role, suspended_at AS "suspendedAt", rejected,
@@ -23,8 +21,7 @@ export async function restrictedUsers(req, res) {
   res.json(rows);
 }
 
-// POST /users/:id/unlock: lets a locked-out person claim again, e.g. after they proved
-// at the desk that an item is theirs. Their rejected claims so far stop counting.
+// POST /users/:id/unlock: lets a locked-out person claim again.
 export async function unlockUser(req, res) {
   const { rows } = await query(
     `UPDATE users SET unlocked_rejections =
@@ -36,9 +33,7 @@ export async function unlockUser(req, res) {
   res.json({ id: rows[0].id, locked: false });
 }
 
-// POST /users/:id/suspend: the person is logged out on their next request and can't
-// log back in until unsuspended. Staff accounts can't be suspended here, and nobody
-// can suspend themselves.
+// POST /users/:id/suspend: logs them out and blocks login. Staff can't be suspended.
 export async function suspendUser(req, res) {
   if (Number(req.params.id) === req.user.id) {
     return res.status(400).json({ error: "You can't suspend your own account." });

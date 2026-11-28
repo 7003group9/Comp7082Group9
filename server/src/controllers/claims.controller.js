@@ -24,9 +24,8 @@ const CLOSED = 'This item has already been claimed.';
 export const MAX_REJECTED_CLAIMS = 3;
 const LOCKED_OUT = `You've had ${MAX_REJECTED_CLAIMS} claims rejected, so you can't make more claims in the app. Visit Campus Security with proof that the item is yours.`;
 
-// Locked out once MAX_REJECTED_CLAIMS claims were rejected since Campus Security last
-// unlocked them. An unlock doesn't delete the rejected claims (staff still see them as
-// rejectedBefore); it records how many there were, and only newer ones count.
+// Locked out after MAX_REJECTED_CLAIMS rejections. Unlocking keeps the old rejections
+// but stops them counting.
 export const isLockedOut = (rejected, unlocked = 0) => rejected - unlocked >= MAX_REJECTED_CLAIMS;
 
 async function lockedOut(userId) {
@@ -43,7 +42,6 @@ async function lockedOut(userId) {
 // myClaim, itemStatus }, where myClaim is this user's claim status if they already claimed it
 // ('pending', 'approved', 'rejected' or 'post hidden'; questions is then empty), else null. itemStatus
 // lets an approved claimant see when the item is 'dropped off' (ready to pick up).
-// Someone locked out (too many rejected claims) gets 403 { error, locked: true }.
 export async function claimForm(req, res) {
   const item = await findItem(req.params.id);
   if (!item) return res.status(404).json({ error: 'Item not found' });

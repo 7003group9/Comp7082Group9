@@ -25,9 +25,8 @@ export function requireNonGuest(req, res, next) {
   }
   next();
 }
-// Runs before every route (app.js). Tokens last 7 days, so a suspension is checked on
-// each request, not only at login: a suspended user's token is refused everywhere,
-// even on public pages like the feed. 401 makes the app log them out and show why.
+// Runs before every route. Tokens last 7 days, so suspension has to be checked on every
+// request, not just at login. The 401 logs them out in the app.
 export function rejectSuspended(req, res, next) {
   const user = userFrom(req);
   if (user && isSuspended(user.id)) return res.status(401).json({ error: SUSPENDED, suspended: true });
